@@ -1,0 +1,257 @@
+import sys
+import numpy as np
+from scipy.ndimage.morphology import binary_dilation
+
+
+def clean_slices_base(dicom_series, percentage = 0.3):
+    """
+    Remove z-slices that are above the valve plane based on valve plane detection.
+    
+    This function identifies and removes slices that are consistently above the valve plane
+    across time frames. It uses a threshold-based approach where if a slice is above the
+    valve plane in at least 50% of time frames, it's considered for removal.
+    
+    Args:
+        dicom_series: DICOM series object containing:
+            - slice_above_valveplane: 2D array (time_frames x z_stacks) indicating 
+              which slices are above valve plane (0 = above, 1 = below)
+            - prepped_seg: 4D segmentation array (time x z height x height x width)
+            - prepped_data: 4D image data array (time x z height x height x width)
+            - slices: number of z-slices
+            - XYZs: list of spatial coordinates for each slice
+
+        percentage: percentage of time-frames used as threshold (default 0.3 = 30%)
+    Returns:
+        list: Indices of z-slices that were removed
+    
+    Modifies:
+        dicom_series.prepped_seg: Updated with slices removed
+        dicom_series.prepped_data: Updated with slices removed  
+        dicom_series.slices: Updated slice count
+        dicom_series.XYZs: Updated coordinate list
+    """
+    number_time_frames = dicom_series.slice_above_valveplane.shape[0]
+    number_z_stacks = dicom_series.slice_above_valveplane.shape[1]
+    
+    # Use 50% of time frames as threshold for determining if slice should be removed
+    threshold = int(percentage * number_time_frames)
+    z_height_remove = []
+
+    # Check each z-slice across all time frames
+    for row in range(number_z_stacks):
+        number_above_base = 0
+        
+        # Count how many time frames this slice is above the valve plane
+        for col in range(number_time_frames):
+            if dicom_series.slice_above_valveplane[col, row] == 0:  # 0 indicates above valve plane
+                number_above_base += 1
+
+            # If this slice is above valve plane in enough time frames, mark for removal
+            if number_above_base >= threshold:
+                z_height_remove.append(row)
+                break
+    
+    # Handle edge case: add missing top layers if lower neighbors are already marked for removal
+    # This ensures we don't leave isolated slices at the top 
+    if (number_z_stacks - 3 in z_height_remove and 
+        number_z_stacks - 2 not in z_height_remove and 
+        number_z_stacks - 1 not in z_height_remove):
+        z_height_remove.extend([number_z_stacks - 2, number_z_stacks - 1])
+    elif (number_z_stacks - 2 in z_height_remove and 
+          number_z_stacks - 1 not in z_height_remove):
+        z_height_remove.append(number_z_stacks - 1)
+    
+    # Remove identified slices from all data structures
+    dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, z_height_remove, axis=1)
+    dicom_series.prepped_data = np.delete(dicom_series.prepped_data, z_height_remove, axis=1)
+    dicom_series.slices = dicom_series.slices - len(z_height_remove)
+    
+    # Update spatial coordinates list, removing coordinates for deleted slices
+    dicom_series.XYZs = [item for i, item in enumerate(dicom_series.XYZs) if i not in z_height_remove]
+
+    return z_height_remove
+
+
+def estimateValvePlanePosition(dicom_exam):
+    """
+    Estimate valve plane position in SAX (Short Axis) slices using morphological analysis.
+    
+    The segmentation network may make myocardium predictions that extend above the valve plane
+    (e.g., by segmenting atrium wall), which can cause LV mesh fitting issues. This function
+    identifies slices/frames that are above the valve plane so their masks can be ignored
+    during LV mesh fitting.
+    
+    Method:
+        Uses morphological analysis to detect where LV myocardium transitions from a closed 
+        circle to a C-shape, indicating the approach to the valve plane. The heuristic 
+        measures how completely the myocardium surrounds the blood pool.
+    
+    Args:
+        dicom_exam: List of DICOM series objects, each containing:
+            - view: string indicating view type ('SAX' for short axis)
+            - frames: number of time frames
+            - slices: number of z-slices  
+            - prepped_seg: 4D segmentation array where:
+                - value 2 = myocardium
+                - value 3 = blood pool
+    
+    Modifies:
+        For each SAX series in dicom_exam:
+            - VP_heuristic2: 2D array (frames x slices) with valve plane estimates
+            - slice_above_valveplane: binary array indicating slices above valve plane
+    
+    Note:
+        Currently only uses SAX slices. Could be enhanced with LAX (Long Axis) slice 
+        comparison for more accurate valve plane detection.
+    """
+    for series in dicom_exam:
+        if series.view == 'SAX':
+            # Initialize valve plane heuristic array
+            series.VP_heuristic2 = np.zeros((series.frames, series.slices))
+            
+            # Analyze each time frame and z-slice
+            for time_frame in range(series.frames):
+                for z_slice in range(series.slices):
+                    # Extract myocardium and blood pool masks
+                    myocardium_mask = series.prepped_seg[time_frame, z_slice] == 2
+                    blood_pool_mask = series.prepped_seg[time_frame, z_slice] == 3
+                    
+                    # Create 1-pixel outer boundary of the blood pool using morphological dilation
+                    blood_pool_boundary = binary_dilation(blood_pool_mask) * (1 - blood_pool_mask)
+                    
+                    # Calculate fraction of blood pool boundary that has myocardium
+                    # If myocardium completely surrounds blood pool, this approaches 1.0
+                    # Add small epsilon values to avoid division by zero
+                    myocardium_coverage = ((np.sum(myocardium_mask * blood_pool_boundary) + 0.00001) / 
+                                         (np.sum(blood_pool_boundary) + 0.00001))
+                    
+                    series.VP_heuristic2[time_frame, z_slice] = myocardium_coverage
+            
+            # Convert to binary: slices with >98% myocardium coverage are considered below valve plane
+            # Use 0.98 threshold rather than 1.0 to allow for occasional missing pixels
+            series.VP_heuristic2 = series.VP_heuristic2 > 0.98
+            
+            # Store binary result indicating slices above valve plane (inverted logic)
+            series.slice_above_valveplane = series.VP_heuristic2.astype(int)
+
+
+def clean_time_frames(dicom_series, slice_threshold = 2):
+    """
+    Remove time frames that have too many missing or empty slices.
+    
+    This function identifies and removes time frames where more than 2 z-slices 
+    contain no image data (sum of pixel values = 0). Including such frames decreases the 
+    accuracy with which the meshes can be fitted to the segmentation masks.
+    
+    Args:
+        dicom_series: DICOM series object containing:
+            - prepped_data: 4D image data array (time x z x height x width)
+            - prepped_seg: 4D segmentation array (time x z x height x width)  
+            - frames: number of time frames
+
+        slice_threshold: threshold of missing slices in order for the time frame 
+                        to be removed (default = 2)
+    
+    Returns:
+        list: Indices of time frames that were removed
+        
+    Modifies:
+        dicom_series.prepped_seg: Updated with incomplete frames removed
+        dicom_series.prepped_data: Updated with incomplete frames removed
+        dicom_series.frames: Updated frame count
+    """
+    incomplete_frames = []
+    
+    # Check each time frame for missing data
+    for time_frame in range(dicom_series.prepped_data.shape[0]):
+        missing_slices_count = 0
+        
+        # Count empty slices in this time frame
+        for z_slice in range(dicom_series.prepped_data.shape[1]):
+            # Check if slice contains any non-zero data
+            if dicom_series.prepped_data[time_frame, z_slice, :, :].sum() == 0:
+                missing_slices_count += 1
+
+            # If more than 2 slices are missing, mark this time frame for removal
+            if missing_slices_count > slice_threshold:
+                incomplete_frames.append(time_frame)
+                break
+    
+    # Remove incomplete time frames from both segmentation and image data
+    dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, incomplete_frames, axis=0)
+    dicom_series.prepped_data = np.delete(dicom_series.prepped_data, incomplete_frames, axis=0)
+    dicom_series.frames = dicom_series.frames - len(incomplete_frames)
+
+    return incomplete_frames
+
+
+def clean_slices_apex(dicom_series, percentage = 0.2):
+    """
+    Remove z-slices at the apex that lack sufficient LV or blood pool segmentation.
+    
+    This function removes z-slices where either the LV myocardium or blood pool 
+    segmentation is missing in more than 20% of time frames. Such slices are 
+    typically at the apex where segmentation becomes unreliable or where 
+    anatomical structures are no longer present.
+    
+    Args:
+        dicom_series: DICOM series object containing:
+            - prepped_seg: 4D segmentation array (time x z height x height x width) where:
+                - value 2 = LV myocardium  
+                - value 3 = blood pool
+            - prepped_data: 4D image data array (time x z height x height x width)
+            - slices: number of z-slices
+            - XYZs: list of spatial coordinates for each slice
+
+        percentage: threshold for number of missing segmentation in order for z slice 
+                    to be removed (default 0.2 = 20%)
+    
+    Returns:
+        list: Indices of z-slices that were removed
+        
+    Modifies:
+        dicom_series.prepped_seg: Updated with problematic slices removed
+        dicom_series.prepped_data: Updated with problematic slices removed
+        dicom_series.slices: Updated slice count  
+        dicom_series.XYZs: Updated coordinate list
+    """
+    number_time_frames = dicom_series.prepped_seg.shape[0]
+    
+    # Use percentage (default 20%) of time frames as threshold for determining problematic slices
+    threshold = int(percentage * number_time_frames)
+    slices_to_remove = []
+    
+    # Check each z-slice across all time frames
+    for z_slice in range(dicom_series.prepped_seg.shape[1]):
+        missing_lv_count = 0
+        missing_blood_pool_count = 0
+        
+        # Count missing segmentations across time frames for this slice
+        for time_frame in range(number_time_frames):
+            # Extract LV myocardium and blood pool masks
+            lv_mask = (dicom_series.prepped_seg[time_frame, z_slice, :, :] == 2).astype(np.uint8)
+            blood_pool_mask = (dicom_series.prepped_seg[time_frame, z_slice, :, :] == 3).astype(np.uint8)
+
+            # Count frames where LV myocardium segmentation is absent
+            if lv_mask.sum() == 0:
+                missing_lv_count += 1
+            
+            # Count frames where blood pool segmentation is absent  
+            if blood_pool_mask.sum() == 0:
+                missing_blood_pool_count += 1
+
+            # If either structure is missing in too many frames, mark slice for removal
+            if missing_lv_count >= threshold or missing_blood_pool_count >= threshold:
+                slices_to_remove.append(z_slice)
+                break
+
+    # Remove problematic slices from all data structures
+    dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, slices_to_remove, axis=1)
+    dicom_series.prepped_data = np.delete(dicom_series.prepped_data, slices_to_remove, axis=1)
+    dicom_series.slices = dicom_series.slices - len(slices_to_remove)
+    
+    # Update spatial coordinates list, removing coordinates for deleted slices
+    dicom_series.XYZs = [item for i, item in enumerate(dicom_series.XYZs) 
+                         if i not in slices_to_remove]
+    
+    return slices_to_remove
