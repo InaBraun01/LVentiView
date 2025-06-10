@@ -62,7 +62,7 @@ class MeshGenerationApp(QWidget):
         fitting_params_layout = QFormLayout(fitting_params_widget)
 
         fitting_params = [
-            ('time_frames_to_fit','Time Frames to be Fit','all'),
+            ('time_frames_to_fit', 'Time Frames to be Fit', 'all'),
             ('num_cycle', 'Number of Cycles', '1'),
             ('num_modes', 'Number of Modes', '25'),
             ('lr', 'Learning Rate', '0.003'),
@@ -77,17 +77,31 @@ class MeshGenerationApp(QWidget):
                 index = input_widget.findText(default)
                 if index >= 0:
                     input_widget.setCurrentIndex(index)
+            elif key == 'time_frames_to_fit':
+                input_widget = QComboBox()
+                input_widget.setEditable(True)  # Allow custom input
+                input_widget.addItems(['all', 'all_loop'])
+                # Set default value
+                if default in ['all', 'all_loop']:
+                    index = input_widget.findText(default)
+                    if index >= 0:
+                        input_widget.setCurrentIndex(index)
+                else:
+                    input_widget.setCurrentText(default)
+                # Add placeholder text to help user understand the format
+                input_widget.setEditText(default)
+                input_widget.lineEdit().setPlaceholderText("Enter 'all', 'all_loop', or comma-separated positive integers (e.g., 1,2,3 for frames 1,2,3)")
             else:
                 input_widget = QLineEdit()
                 input_widget.setText(default)
                 if key in ['num_cycle', 'num_modes', 'training_steps']:
                     input_widget.setValidator(QIntValidator(0, 1000000, self))
+            
             fitting_params_layout.addRow(label + ':', input_widget)
             self.param_fields[key] = input_widget
 
         self.set_params_tab_widget.addTab(fitting_params_widget, "Mesh Fitting Parameters")
-
-        # Printing parameters page
+                # Printing parameters page
         printing_params_widget = QWidget()
         printing_params_layout = QFormLayout(printing_params_widget)
 
@@ -325,26 +339,25 @@ class MeshGenerationApp(QWidget):
 
     def check_enable_run(self):
         self.run_button.setEnabled(bool(self.input_path and self.output_folder))
-
+        
     def get_fit_params(self):
         """Get parameters with proper type conversion"""
         params = {}
-        
         # Define parameter types for proper conversion
         integer_params = [
             'num_cycle', 'num_modes', 'training_steps', 'steps_between_progress_update',
             'burn_in_length', 'cp_frequency', 'steps_between_fig_saves'
         ]
-        
         float_params = [
-            'lr', 'mode_loss_weight', 'global_shift_penalty_weigth', 
+            'lr', 'mode_loss_weight', 'global_shift_penalty_weigth',
             'slice_shift_penalty_weigth', 'rotation_penalty_weigth'
         ]
-        
         boolean_params = [
             'show_progress', 'random_starting_mesh', 'allow_global_shift_xy',
             'allow_global_shift_z', 'allow_slice_shift', 'allow_rotations'
         ]
+        # Special parameters that need custom parsing
+        special_params = ['time_frames_to_fit']
         
         for key, widget in self.param_fields.items():
             if isinstance(widget, QComboBox):
@@ -359,6 +372,27 @@ class MeshGenerationApp(QWidget):
                     params[key] = float(text) if text else 0.0
                 elif key in boolean_params:
                     params[key] = text.lower() in ('true', '1', 'yes')
+                elif key in special_params:
+                    if key == 'time_frames_to_fit':
+                        # Parse time_frames_to_fit parameter
+                        if text in ['all', 'all_loop']:
+                            params[key] = text
+                        else:
+                            # Try to parse as comma-separated integers
+                            try:
+                                frame_list = [int(x.strip()) for x in text.split(',') if x.strip()]
+                                if not frame_list:  # Empty list
+                                    raise ValueError("Empty integer list")
+                                # Validate that all integers are greater than 0
+                                if any(frame <= 0 for frame in frame_list):
+                                    raise ValueError("All frame numbers must be greater than 0")
+                                # Convert from 1-based to 0-based indexing for internal use
+                                params[key] = [frame - 1 for frame in frame_list]
+                            except ValueError as ve:
+                                if "invalid literal" in str(ve):
+                                    raise ValueError(f"time_frames_to_fit must be 'all', 'all_loop', or comma-separated positive integers")
+                                else:
+                                    raise ve
                 else:
                     # String parameters
                     params[key] = text
@@ -366,7 +400,6 @@ class MeshGenerationApp(QWidget):
             except ValueError as e:
                 error_msg = f"Invalid value for {key}: '{text}'. Using default."
                 self.log_output.append(error_msg)
-                
                 # Set default values for failed conversions
                 if key in integer_params:
                     if key == 'cp_frequency':
@@ -388,6 +421,8 @@ class MeshGenerationApp(QWidget):
                         params[key] = 0.0
                 elif key in boolean_params:
                     params[key] = True
+                elif key == 'time_frames_to_fit':
+                    params[key] = 'all'  # Default fallback
                 else:
                     params[key] = ""
         
