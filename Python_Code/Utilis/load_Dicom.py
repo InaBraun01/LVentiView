@@ -1,4 +1,4 @@
-import os
+import os,sys
 import pydicom
 import numpy as np
 
@@ -136,6 +136,24 @@ def dataArrayFromDicomFolder(PathDicom):
     # Placeholder: This data is treated as 4D even though it's likely not volumetric over time
     is3D = False
     multifile = True
+
+
+    # remove_indices, remove_slices = [32,39],[2,6]
+    # remove_zstacks = True
+
+    # # Use a list comprehension to create a mask of indices to keep
+    # keep_indices = [i for i in range(data.shape[0]) if i not in remove_indices]
+
+    # # Create a new array with only the desired time frames
+    # filtered_data = data[keep_indices, ...]
+
+    # if remove_zstacks == True:
+    #     filtered_data = filtered_data[:, remove_slices[0]:-remove_slices[1], :, :]
+
+    # data = filtered_data
+
+    # print(data.shape)
+    # sys.exit()
 
     return data, ConstPixelSpacing, image_ids, dicom_dir_details, slice_locations, trigger_times, image_positions, is3D, multifile
 

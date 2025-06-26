@@ -3,13 +3,18 @@ import numpy as np
 from scipy.ndimage.morphology import binary_dilation
 
 
+from Python_Code.Utilis.pytorch_segmentation_utils import (
+    produce_segmentation_at_required_resolution, simple_shape_correction
+)
+from Python_Code.Utilis.visualizeDICOM import planeToXYZ
+
 def clean_slices_base(dicom_series, percentage = 0.3):
     """
     Remove z-slices that are above the valve plane based on valve plane detection.
     
     This function identifies and removes slices that are consistently above the valve plane
     across time frames. It uses a threshold-based approach where if a slice is above the
-    valve plane in at least 50% of time frames, it's considered for removal.
+    valve plane in at least 30% of time frames, it's considered for removal.
     
     Args:
         dicom_series: DICOM series object containing:
@@ -17,6 +22,7 @@ def clean_slices_base(dicom_series, percentage = 0.3):
               which slices are above valve plane (0 = above, 1 = below)
             - prepped_seg: 4D segmentation array (time x z height x height x width)
             - prepped_data: 4D image data array (time x z height x height x width)
+            - cleaned_data: 4D image data array (time x z height x height x width)
             - slices: number of z-slices
             - XYZs: list of spatial coordinates for each slice
 
@@ -33,7 +39,7 @@ def clean_slices_base(dicom_series, percentage = 0.3):
     number_time_frames = dicom_series.slice_above_valveplane.shape[0]
     number_z_stacks = dicom_series.slice_above_valveplane.shape[1]
     
-    # Use 50% of time frames as threshold for determining if slice should be removed
+    # Use 30% of time frames as threshold for determining if slice should be removed
     threshold = int(percentage * number_time_frames)
     z_height_remove = []
 
@@ -64,10 +70,12 @@ def clean_slices_base(dicom_series, percentage = 0.3):
     # Remove identified slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, z_height_remove, axis=1)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, z_height_remove, axis=1)
+    dicom_series.cleaned_data = np.delete(dicom_series.cleaned_data, z_height_remove, axis=1)
     dicom_series.slices = dicom_series.slices - len(z_height_remove)
-    
-    # Update spatial coordinates list, removing coordinates for deleted slices
-    dicom_series.XYZs = [item for i, item in enumerate(dicom_series.XYZs) if i not in z_height_remove]
+
+    dicom_series.image_positions = [item for i, item in enumerate(dicom_series.image_positions) if i not in z_height_remove]
+    dicom_series.slice_locations = [item for i, item in enumerate(dicom_series.slice_locations) if i not in z_height_remove]
+
 
     return z_height_remove
 
@@ -147,6 +155,7 @@ def clean_time_frames(dicom_series, slice_threshold = 2):
         dicom_series: DICOM series object containing:
             - prepped_data: 4D image data array (time x z x height x width)
             - prepped_seg: 4D segmentation array (time x z x height x width)  
+            - cleaned_data: 4D image data array (time x z height x height x width)
             - frames: number of time frames
 
         slice_threshold: threshold of missing slices in order for the time frame 
@@ -180,7 +189,12 @@ def clean_time_frames(dicom_series, slice_threshold = 2):
     # Remove incomplete time frames from both segmentation and image data
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, incomplete_frames, axis=0)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, incomplete_frames, axis=0)
+    dicom_series.cleaned_data = np.delete(dicom_series.cleaned_data, incomplete_frames, axis=0)
     dicom_series.frames = dicom_series.frames - len(incomplete_frames)
+
+    keep_indices = [i for i in range(dicom_series.prepped_data.shape[0]) if i not in incomplete_frames]
+    dicom_series.image_ids = dicom_series.image_ids[keep_indices]
+
 
     return incomplete_frames
 
@@ -200,6 +214,7 @@ def clean_slices_apex(dicom_series, percentage = 0.2):
                 - value 2 = LV myocardium  
                 - value 3 = blood pool
             - prepped_data: 4D image data array (time x z height x height x width)
+            - cleaned_data: 4D image data array (time x z height x height x width)
             - slices: number of z-slices
             - XYZs: list of spatial coordinates for each slice
 
@@ -248,10 +263,91 @@ def clean_slices_apex(dicom_series, percentage = 0.2):
     # Remove problematic slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, slices_to_remove, axis=1)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, slices_to_remove, axis=1)
+    dicom_series.cleaned_data = np.delete(dicom_series.cleaned_data, slices_to_remove, axis=1)
     dicom_series.slices = dicom_series.slices - len(slices_to_remove)
-    
-    # Update spatial coordinates list, removing coordinates for deleted slices
-    dicom_series.XYZs = [item for i, item in enumerate(dicom_series.XYZs) 
-                         if i not in slices_to_remove]
+
+    dicom_series.image_positions = [item for i, item in enumerate(dicom_series.image_positions) if i not in slices_to_remove]
+    dicom_series.slice_locations = [item for i, item in enumerate(dicom_series.slice_locations) if i not in slices_to_remove]
     
     return slices_to_remove
+
+
+def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
+    """
+    Post-process cleaned DICOM data for each series:
+    - Segments the cleaned data at the required resolution.
+    - Computes crop centers and applies cropping.
+    - Generates 3D world coordinates (X, Y, Z) for each pixel in each slice.
+    - Prepares segmented data and mask in the expected format.
+    - Applies shape correction for short-axis (SAX) views.
+
+    Parameters:
+    -----------
+    dicom_series : list 
+        A list of DICOM series objects, each expected to have attributes like
+        `cleaned_data`, `pixel_spacing`, `view`, `image_positions`, and `orientation`.
+    """
+
+    for series_idx, series in enumerate(dicom_exam.series):
+        print(series.cleaned_data.shape)
+
+        is_sax = series.view in ['SAX', 'unknown']
+        crop_size = dicom_exam.sz
+
+        # Perform segmentation and determine cropping center
+        segmented_data, segmentation_mask, center_x, center_y = produce_segmentation_at_required_resolution(
+            series.cleaned_data, 
+            series.pixel_spacing, 
+            is_sax
+        )
+
+        # Compute max offset for valid cropping range
+        max_offset = min(
+            segmentation_mask.shape[2] - crop_size, 
+            segmentation_mask.shape[3] - crop_size
+        )
+
+        # Clip center coordinates to keep crop within bounds
+        center_x = np.clip(center_x - crop_size // 2, 0, max_offset)
+        center_y = np.clip(center_y - crop_size // 2, 0, max_offset)
+        series.c1, series.c2 = center_x, center_y
+
+        # Generate 3D world coordinates for each slice in the series
+        series.XYZs = []
+        for slice_idx in range(series.slices):
+            height, width = series.cleaned_data.shape[-2:]  # Dynamic dimensions
+
+            X, Y, Z = planeToXYZ(
+                (height, width),
+                series.image_positions[slice_idx],
+                series.orientation,
+                [1, 1]  # Assuming isotropic in-plane resolution; adjust if needed
+            )
+
+            # Crop the coordinate grids
+            X_cropped = X[center_y:center_y + crop_size, center_x:center_x + crop_size]
+            Y_cropped = Y[center_y:center_y + crop_size, center_x:center_x + crop_size]
+            Z_cropped = Z[center_y:center_y + crop_size, center_x:center_x + crop_size]
+
+            # Stack cropped coordinates and flatten to (N, 3)
+            xyz_coords = np.stack([X_cropped.ravel(), Y_cropped.ravel(), Z_cropped.ravel()], axis=1)
+            series.XYZs.append(xyz_coords)
+
+        # Define slices for cropping
+        crop_slice_x = slice(center_x, center_x + crop_size)
+        crop_slice_y = slice(center_y, center_y + crop_size)
+
+        # Crop and transpose data to shape (time, slice, y, x)
+        series.prepped_seg = np.transpose(
+            segmentation_mask[:, :, crop_slice_x, crop_slice_y], 
+            (0, 1, 3, 2)
+        )
+        series.prepped_data = np.transpose(
+            segmented_data[:, :, crop_slice_x, crop_slice_y], 
+            (0, 1, 3, 2)
+        )
+
+        # Optional shape correction for short-axis view
+        if is_sax:
+            print("  Applying shape correction for SAX view")
+            series.prepped_seg = simple_shape_correction(series.prepped_seg)

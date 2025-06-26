@@ -24,12 +24,12 @@ from Python_Code.DicomSeries import DicomSeries
 from Python_Code.Utilis.folder_utils import (
     generate_exam_folders, sort_folder_names, path_leaf, create_output_folders
 )
-from Python_Code.Utilis.segmentation_utils import (
-    produceSegAtRequiredRes, simpleShapeCorrection
+from Python_Code.Utilis.pytorch_segmentation_utils import (
+    produce_segmentation_at_required_resolution, simple_shape_correction
 )
 from Python_Code.Utilis.visualizeDICOM import planeToXYZ, to3Ch
 from Python_Code.Utilis.clean_MRI_utils import (
-    clean_slices_base, clean_slices_apex, estimateValvePlanePosition, clean_time_frames
+    clean_slices_base, clean_slices_apex, estimateValvePlanePosition, clean_time_frames,postprocess_cleaned_data
 )
 
 
@@ -192,6 +192,11 @@ class DicomExam:
         # Update time frame count after cleaning
         self.time_frames = self.time_frames - len(incomplete_frames)
 
+        #Postprecess cleaned data: Calculate world coordinates and new crop
+        postprocess_cleaned_data(self, self.series)
+
+            
+
     def save_images(self, downsample_factor=1, subfolder=None, prefix='', 
                    use_mesh_images=False, overlay=True):
         """
@@ -224,6 +229,7 @@ class DicomExam:
             img = np.concatenate(np.concatenate(
                 series.prepped_data[:, :, ::ds, ::ds], axis=2))
             img = to3Ch(img)
+
 
             if seg_data is not None:
                 #Downsample the segmentation and convert it to RGB format
@@ -318,13 +324,13 @@ class DicomExam:
         """
 
         all_slices = []
-        for series in self:
-            all_slices.extend(series.XYZs)
+        for s in self:
+            all_slices.extend(s.XYZs)
+
         grid = np.concatenate(all_slices)
         self.center = np.mean(grid, axis=0)
 
-
-        # Apply manual center shift if provided
+        #Apply manual center shift if provided
         if center_shift is not None:
             self.center -= center_shift
 
@@ -382,6 +388,7 @@ class DicomExam:
             for k in range(len(series.XYZs)):
                 # Center of current slice
                 slice_center = np.mean(series.XYZs[k], axis=0)
+                print(f"slice_center: {slice_center}")
                 
                 # Normalize SAX normal vector
                 n = self.sax_normal / np.linalg.norm(self.sax_normal, 2)

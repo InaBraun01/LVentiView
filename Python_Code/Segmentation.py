@@ -57,14 +57,14 @@ def segment(dicom_exam):
         segmented_data, segmentation_mask, center_x, center_y = produce_segmentation_at_required_resolution(
             series.prepped_data, series.pixel_spacing, is_sax
         )
-
         # Resample segmentation back to original resolution
         # Order=0 ensures label preservation (nearest neighbor interpolation)
         zoom_factors = (1, 1, 1 / series.pixel_spacing[1], 1 / series.pixel_spacing[2])
         series.seg = zoom(segmentation_mask, zoom_factors, order=0)
         
         # Calculate optimal crop size based on myocardium segmentation
-        crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y)
+        # crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y)
+        crop_size = 64
         crop_sizes.append(crop_size)
 
         # Ensure crop region stays within image bounds
@@ -77,6 +77,7 @@ def segment(dicom_exam):
         center_x = np.clip(center_x - crop_size // 2, 0, max_offset)
         center_y = np.clip(center_y - crop_size // 2, 0, max_offset)
         series.c1, series.c2 = center_x, center_y
+
 
         # Generate 3D world coordinates for each pixel in each slice
         series.XYZs = []
@@ -96,6 +97,10 @@ def segment(dicom_exam):
             
             # Stack coordinates and flatten for easy access
             xyz_coords = np.stack([X_cropped.ravel(), Y_cropped.ravel(), Z_cropped.ravel()], axis=1)
+            sz = 64
+            test = np.concatenate([X_cropped.reshape((sz**2,1)), Y_cropped.reshape((sz**2,1)), Z_cropped.reshape((sz**2,1))])
+
+            # print(np.concatenate([X.reshape((sz**2,1)), Y.reshape((sz**2,1)), Z.reshape((sz**2,1))]).sum())
             series.XYZs.append(xyz_coords)
 
         # Crop and transpose data to match expected format (time, slice, y, x)
@@ -105,6 +110,7 @@ def segment(dicom_exam):
         series.prepped_seg = np.transpose(
             segmentation_mask[:, :, crop_slice_x, crop_slice_y], (0, 1, 3, 2)
         )
+
         series.prepped_data = np.transpose(
             segmented_data[:, :, crop_slice_x, crop_slice_y], (0, 1, 3, 2)
         )
@@ -117,6 +123,7 @@ def segment(dicom_exam):
 
     #calculate crop size for all series in dicom exam
     dicom_exam.sz = int(np.mean(crop_sizes))
+    # dicom_exam.sz = 64
 
 
 def _calculate_optimal_crop_size(segmentation, center_x, center_y, margin_factor=2):

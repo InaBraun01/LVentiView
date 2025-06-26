@@ -72,6 +72,7 @@ def fit_mesh(dicom_exam,
     Returns:
         List of Dice scores for each fit.
     """
+    
     if series_to_exclude is None:
         series_to_exclude = []
 
@@ -84,7 +85,6 @@ def fit_mesh(dicom_exam,
 
     # Setup paths and parameters
     use_bp_channel = True
-    use_sdf = False
     sz = dicom_exam.sz
 
     # Create output folders
@@ -93,7 +93,6 @@ def fit_mesh(dicom_exam,
     # Load shape model components
     (mesh_1, starting_cp, PHI3, PHI, mode_bounds, mode_means, 
         mesh_offset, mesh_axes) = ut.load_ShapeModel(num_modes, sz, cp_frequency=cp_frequency, model_dir=mesh_model_dir)
-    
 
     # Prepare voxelized mean mesh for input
     mean_arr_batch = ut.prepare_voxelized_mean_array(mesh_1, sz, use_bp_channel, mesh_offset, device)

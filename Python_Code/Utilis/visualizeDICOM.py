@@ -9,6 +9,7 @@ This module provides utilities for:
 
 import sys
 import numpy as np
+import matplotlib.colors as mcolors
 
 
 def planeToXYZ(img_size, position=np.array([0, 0, 0]), orientation=[np.array([1, 0, 0, 1, 0, 0])], 
@@ -77,12 +78,13 @@ def planeToXYZ(img_size, position=np.array([0, 0, 0]), orientation=[np.array([1,
 
 def to3Ch(img):
     """
-    Convert image to 3-channel RGB format for visualization.
+    Convert image to 3-channel RGB format for visualization using a custom colormap.
     
-    Handles different input formats:
-    - Grayscale (H,W): Converts to RGB by replicating channels
-    - Segmentation masks with values [0,1,2,3]: Maps to colors (black, red, green, blue)
-    - RGB images (H,W,3): Normalizes to [0,1] range
+    Class-color mapping:
+        0 = black (#000000)
+        1 = red   (#C10E21)
+        2 = green (#2E8B57)
+        3 = blue  (#4B6FA5)
     
     Args:
         img (np.ndarray): Input image with shape (H,W) or (H,W,3)
@@ -90,31 +92,37 @@ def to3Ch(img):
     Returns:
         np.ndarray: 3-channel image with shape (H,W,3) and values in [0,1]
     """
+    # Define color map (in RGB, scaled to [0,1])
+    hex_colors = {
+        0: "#000000",   # black
+        1: "#C10E21",   # JAHA red
+        2: "#2E8B57",   # green
+        3: "#4B6FA5",   # modern blue
+    }
+    rgb_colors = {k: mcolors.to_rgb(v) for k, v in hex_colors.items()}
+
     if len(img.shape) == 2:
-        # Handle 2D input
         img_vals = np.unique(img)
         
-        # Special case: segmentation mask with classes 0,1,2,3
-        if set(img_vals) <= set([0, 1, 2, 3]):
-            # Create color-coded segmentation: 
-			# 0=black, 1=red (RV), 2=green (LV), 3=blue (blood pool)
-            cimg = np.zeros(img.shape + (3,))
-            for i in [1, 2, 3]:
-                cimg[img == i, i-1] = 1  # Map class i to channel i-1
+        # Handle segmentation mask with classes 0–3
+        if set(img_vals) <= set(rgb_colors.keys()):
+            h, w = img.shape
+            cimg = np.zeros((h, w, 3))
+            for label, color in rgb_colors.items():
+                cimg[img == label] = color
             return cimg
         else:
-            # Regular grayscale image: normalize and replicate across 3 channels
+            # Grayscale image: normalize and replicate
             img = img / img.max()
             return np.tile(img[..., None], (1, 1, 3))
-            
+
     elif len(img.shape) == 3:
-        # Handle 3D input (already RGB)
+        # Already RGB: normalize
         img = img / img.max()
         return img
-        
+
     else:
-        print(f'Error: input to to3Ch() should have shape (H,W) or (H,W,3), '
-              f'but received input with shape: {img.shape}')
+        print(f'Error: Expected shape (H,W) or (H,W,3), got {img.shape}')
 
 
 def prepMeshMasks(dicom_exam):

@@ -510,7 +510,7 @@ def get_time_frames_to_fit(dicom_exam, time_frames_to_fit, burn_in_length, num_c
         return list(range(-burn_in_length, 0)) + list(range(dicom_exam.time_frames))
     elif time_frames_to_fit == 'all_loop':
         return (list(range(-burn_in_length, 0)) + 
-                list(range(dicom_exam.time_frames)) * num_cycle)
+                list(range(dicom_exam.time_frames)) * int(num_cycle))
     else:
         return time_frames_to_fit
 

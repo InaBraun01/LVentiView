@@ -61,6 +61,7 @@ class DicomSeries(object):
         
         # Initialize processing variables
         self.prepped_data = self.data  # Will be modified during preprocessing
+        self.cleaned_data = self.data  #Will be modified as the data is cleaned
         self.frames = self.data.shape[0]  # Number of cardiac phases
         self.slices = self.data.shape[1]  # Number of image slices
         self.seg = None  # Segmentation mask (populated later)
