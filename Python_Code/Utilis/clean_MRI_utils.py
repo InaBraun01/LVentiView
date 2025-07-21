@@ -1,7 +1,8 @@
 import sys
 import numpy as np
 from scipy.ndimage.morphology import binary_dilation
-
+import matplotlib.pyplot as plt
+from scipy.ndimage.measurements import center_of_mass
 
 from Python_Code.Utilis.pytorch_segmentation_utils import (
     produce_segmentation_at_required_resolution, simple_shape_correction
@@ -57,16 +58,33 @@ def clean_slices_base(dicom_series, percentage = 0.3):
                 z_height_remove.append(row)
                 break
     
+    #this is hard because I do not
     # Handle edge case: add missing top layers if lower neighbors are already marked for removal
-    # This ensures we don't leave isolated slices at the top 
+    # This ensures we don't leave isolated slices at the top or the bottom, depending on how the MRI orientation
+
+    z_height_remove = set(z_height_remove)
+
+    # Top padding logic 
     if (number_z_stacks - 3 in z_height_remove and 
         number_z_stacks - 2 not in z_height_remove and 
         number_z_stacks - 1 not in z_height_remove):
-        z_height_remove.extend([number_z_stacks - 2, number_z_stacks - 1])
+        z_height_remove.update([number_z_stacks - 2, number_z_stacks - 1])
     elif (number_z_stacks - 2 in z_height_remove and 
-          number_z_stacks - 1 not in z_height_remove):
-        z_height_remove.append(number_z_stacks - 1)
-    
+        number_z_stacks - 1 not in z_height_remove):
+        z_height_remove.add(number_z_stacks - 1)
+
+    # Bottom padding logic
+    if (0 in z_height_remove and 
+        1 not in z_height_remove and 
+        2 not in z_height_remove):
+        z_height_remove.update([1, 2])
+    elif (0 in z_height_remove and 
+        1 not in z_height_remove):
+        z_height_remove.add(1)
+
+    # Convert back to sorted list if needed
+    z_height_remove = sorted(z_height_remove)
+        
     # Remove identified slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, z_height_remove, axis=1)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, z_height_remove, axis=1)
@@ -76,6 +94,7 @@ def clean_slices_base(dicom_series, percentage = 0.3):
     dicom_series.image_positions = [item for i, item in enumerate(dicom_series.image_positions) if i not in z_height_remove]
     dicom_series.slice_locations = [item for i, item in enumerate(dicom_series.slice_locations) if i not in z_height_remove]
 
+    print(dicom_series.prepped_data.shape)
 
     return z_height_remove
 
@@ -351,3 +370,47 @@ def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
         if is_sax:
             print("  Applying shape correction for SAX view")
             series.prepped_seg = simple_shape_correction(series.prepped_seg)
+
+
+def estimate_MRI_orientation(dicom_exam):
+    slice_diameter = []
+    for i in range(dicom_exam.series[0].prepped_seg.shape[1]):
+        slice = dicom_exam.series[0].prepped_seg[0,i,:,:]
+        myo_mask = np.where(slice == 2, 1, 0)
+
+        center_y, center_x = center_of_mass(myo_mask)
+        cy, cx = int(np.round(center_y)), int(np.round(center_x))
+
+        diameters = []
+
+        # Horizontal diameter
+        h_pixels = np.where(myo_mask[cy, :] == 1)[0]
+        if len(h_pixels) > 0:
+            diameters.append(h_pixels[-1] - h_pixels[0])
+        
+        # Vertical diameter  
+        v_pixels = np.where(myo_mask[:, cx] == 1)[0]
+        if len(v_pixels) > 0:
+            diameters.append(v_pixels[-1] - v_pixels[0])
+        
+        # Diagonal diameters
+        d1_pixels = np.where(np.diag(myo_mask) == 1)[0]
+        if len(d1_pixels) > 0:
+            diameters.append((d1_pixels[-1] - d1_pixels[0]) * np.sqrt(2))
+        
+        d2_pixels = np.where(np.diag(np.rot90(myo_mask)) == 1)[0]
+        if len(d2_pixels) > 0:
+            diameters.append((d2_pixels[-1] - d2_pixels[0]) * np.sqrt(2))
+        
+        slice_diameter.append(np.mean(diameters))
+    
+
+    n = dicom_exam.series[0].prepped_seg.shape[1]
+    mid = n // 2
+    start_avg = sum(slice_diameter[:mid]) / mid
+    end_avg = sum(slice_diameter[mid:]) / (n - mid)
+
+    if start_avg > end_avg:
+        dicom_exam.MRI_orientation = "base_top"
+    elif start_avg < end_avg:
+        dicom_exam.MRI_orientation = "apex_top"
