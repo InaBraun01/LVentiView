@@ -1,3 +1,4 @@
+import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -28,6 +29,17 @@ colors = {
     'volume_mesh': "#868686"   # grey
 }
 
+# print("W/O Slice")
+# print(((fil_df_no_top['bp_vol'][397] - 8.58)/8.58)*100)
+
+# print("All Slice")
+# print(((fil_df_all['bp_vol'][397] - 8.58)/8.58)*100)
+
+# print("With Offset")
+# print(((fil_df_offset['bp_vol'][397] - 8.58)/8.58)*100)
+# sys.exit()
+
+
 # Plot the main data with improved styling
 # W/O Top Slice
 line1 = ax.plot(fil_df_no_top['distance'], fil_df_no_top['bp_vol'], 
@@ -56,6 +68,10 @@ gt_line = ax.axhline(y=8.58, color=colors['ground_truth'], linewidth=2.5,
 vm_line = ax.axhline(y=8.65, color=colors['volume_mesh'], linewidth=2.5, 
                      linestyle='--', label='Volume Meshes', alpha=0.9, zorder=2)
 
+MRI_line = ax.axvline(x=3.75, color=colors['volume_mesh'], linewidth=2.5, 
+                    label='MRI Resolution', alpha=0.9, zorder=2)
+
+
 # Enhance the axes
 ax.set_xscale('log')
 ax.invert_xaxis()
@@ -65,6 +81,7 @@ ax.set_xlabel('Distance [mm]', fontsize=16, fontweight='bold', color='#000000')
 ax.set_ylabel('Volume [ml]', fontsize=16, fontweight='bold', color='#000000')
 ax.set_title('Blood Pool Volume Analysis', fontsize=18, fontweight='bold', 
              color='#000000', pad=15)
+# ax.set_ylim(0, 14.5)
 
 # Improve tick styling
 ax.tick_params(axis='both', which='major', labelsize=11, colors='#000000')
