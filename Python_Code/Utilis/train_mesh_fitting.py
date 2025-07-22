@@ -6,18 +6,22 @@ specifically for cardiac segmentation tasks. It includes functionality for train
 neural networks to predict mesh deformations and control points.
 """
 
-import sys
+import sys,os
+import csv
 import numpy as np
 import torch
 import torch.optim as optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from Python_Code.Utilis.loss_functions import meshFittingLoss
 from Python_Code.Utilis.fit_mesh_utils import (
-    voxelizeUniform, getSlices, slicewiseDice, getTensorLabelsAndInputImage
+    voxelizeUniform, getSlices, dice_loss
 )
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+import matplotlib.pyplot as plt 
 
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer, lr, li_model, mean_arr_batch, 
                    tensor_labels, mode_loss_weight, global_shift_penalty_weigth,
@@ -78,6 +82,18 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
     #Tensor of ones used as input
     ones_input = torch.Tensor(np.ones((1, 1))).to(device)
 
+    #define optimizer
+    optimizer = opt_method(li_model.parameters(), lr=lr)
+    #Define scheduler
+    scheduler = ReduceLROnPlateau(
+    optimizer,
+    mode='min',
+    factor=0.5,
+    patience=200,
+    threshold=1e-4,
+    threshold_mode='rel',
+    cooldown=50,
+    min_lr=1e-6)
 
     while should_continue_training(i, dice_history, train_mode, train_steps):
 
@@ -92,18 +108,8 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
         # Zero gradients
         optimizer.zero_grad()
 
-        # print(mean_arr_batch[:1].sum())
-
         # Forward pass through the model
         outputs, modes_out, global_shifts_out, rot_out, predicted_cp, slice_shifts_out = li_model([mean_arr_batch[:1], ones_input])
-
-        # print(outputs.sum())
-        # print(modes_out.sum())
-        # print(global_shifts_out.sum())
-        # print(rot_out.sum())
-        # print(slice_shifts_out.sum())
-        # Dynamic blood pool weight scheduling
-        # Linearly decrease blood pool weight during training
 
         bp_weights.append(myo_weight)
         current_bp_weight = bp_weight
@@ -116,7 +122,14 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
         )
         
         # Total loss
-        loss = dice_loss + modes_loss + global_shift_loss + rotation_loss + slice_shift_loss
+        loss = 1000*dice_loss + modes_loss + global_shift_loss + rotation_loss + slice_shift_loss
+
+        prev_lr = scheduler.get_last_lr()[0]
+        scheduler.step(dice_loss.item())
+        new_lr = scheduler.get_last_lr()[0]
+
+        if new_lr != prev_lr:
+            print(f"[Step {i}] Learning rate changed: {prev_lr:.6e} → {new_lr:.6e}")
 
         # Store losses for tracking
         losses_list.append(loss.item())
@@ -132,22 +145,24 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
         with torch.no_grad():
             # Update mesh rendering periodically
             if i % steps_between_fig_saves == 0:
-                mesh_render, mean_arr_batch = update_mesh_rendering_and_training_state(
+                mesh_render, mean_arr_batch, origin = update_mesh_rendering_and_training_state(
                     dicom_exam, se, eli, warp_and_slice_model, learned_inputs, 
                     pcaD, mesh_offset)
                 
-                optimizer = opt_method(li_model.parameters(), lr=lr)
-                
             # Print progress and calculate metrics periodically
             if i % steps_between_progress_update == 0:
-                current_dice = print_training_progress(
+                d0,d1 = print_training_progress(
                     i, mesh_render, train_steps, losses, outputs, tensor_labels, show_progress
                 )
-                
-                dice_history.append(current_dice)
+                dice_history.append((d0.item(),d1.item()))
                 prediction_history.append(outputs.detach().cpu().numpy())
 
         i += 1
+
+    with open(dicom_exam.folder['base'] + '/dice_history.csv', 'a', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Myocardium Dice', 'Blood Pool Dice'])  # optional header
+        writer.writerows(dice_history)
 
     return outputs
 
@@ -165,6 +180,14 @@ def should_continue_training(i, dice_history, train_mode, train_steps):
     Returns:
         bool: True if training should continue, False otherwise
     """
+
+    #if the dice is very high for both the myocardium and the blood pool stop
+    
+    if len(dice_history) > 0 and dice_history[-1][0] >= 0.87:
+        print("Dice Scores are high enough Early Stopping activated:")
+        print(f'Myocardium dice: {dice_history[-1][0]:.3e}, Blood pool dice: {dice_history[-1][1]:.3e}')
+        return False
+
     if train_mode == 'until_no_progress':
         # Continue if we haven't seen enough history, if we're still improving,
         # or if we haven't reached minimum steps
@@ -235,7 +258,7 @@ def update_mesh_rendering_and_training_state(dicom_exam, se, eli, warp_and_slice
     # Update the starting mesh with current predictions
     update_starting_mesh = True
     if update_starting_mesh:
-        mean_arr, mean_bp_arr = voxelizeUniform(msh, sz, bp_channel=True, offset=mesh_offset)
+        mean_arr, mean_bp_arr, origin = voxelizeUniform(msh, sz, bp_channel=True)
         mean_arr_batch = torch.Tensor(np.concatenate([mean_arr[None,None], mean_bp_arr[None,None]], axis=1)).to(device)
         # Get current mode predictions and convert to control points
         ones_input = torch.Tensor(np.ones((1, 1))).to(device)
@@ -246,7 +269,7 @@ def update_mesh_rendering_and_training_state(dicom_exam, se, eli, warp_and_slice
         warp_and_slice_model.control_points = predicted_cp
 
     
-    return mesh_render, mean_arr_batch
+    return mesh_render, mean_arr_batch, origin
 
 
 def print_training_progress(i, mesh_render, train_steps, losses, outputs, tensor_labels, show_progress):
@@ -265,27 +288,21 @@ def print_training_progress(i, mesh_render, train_steps, losses, outputs, tensor
     Returns:
         float: Current average dice score across slices
     """
-    # Convert tensors to numpy for processing
-    mcolor = np.transpose(mesh_render.detach().cpu().numpy()[0], (3, 1, 2, 0))
-    pred = np.transpose(outputs.detach().cpu().numpy()[0], (3, 1, 2, 0)) > 0
-    target = np.transpose(tensor_labels.detach().cpu().numpy()[0], (3, 1, 2, 0))
 
-    # Calculate slice-wise dice scores
-    slice_dice, has_target = slicewiseDice(pred[..., 0:1], target[..., 0:1])
-    
-    # Calculate average dice score (only for slices that have targets)
-    current_dice = np.sum(slice_dice) / np.sum(has_target)
+    d0 = dice_loss(outputs[:,:1], tensor_labels[:,:1])  # Myocardium
+    d1 = dice_loss(outputs[:,1:], tensor_labels[:,1:])  # Blood pool
+
     latest_loss = losses[0].item()
     
     if show_progress:
         # Print main progress metrics
-        print(f"{i}/{train_steps}: loss = {latest_loss:.3f}, dice = {current_dice:.3f}")
+        print(f"{i}/{train_steps}: loss = {latest_loss:.3f}, Myo dice = {d0:.3f}, Blood pool dice = {d1:.3f}")
         
         # Print detailed loss breakdown
         print(f"loss breakdown: 1-dice = {losses[1].item():.3f}, modes = {losses[2].item():.3f}, "
               f"global shifts = {losses[3].item():.3f}, slice shifts = {losses[5].item():.3f}, "
               f"rotation = {losses[4].item():.3f}")
 
-    return current_dice
+    return d0,d1
 
 

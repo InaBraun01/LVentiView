@@ -9,7 +9,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from Python_Code.Utilis.folder_utils import path_leaf
-from Python_Code.Utilis.load_Dicom import dataArrayFromDicom
+from Python_Code.Utilis.load_Dicom import dataArrayFromDicom, dataArrayFromNifti
 
 
 class DicomSeries(object):
@@ -41,14 +41,26 @@ class DicomSeries(object):
         self.full_path = full_path
         self.series_folder_name = path_leaf(full_path).lower().split('.')[0]
         self.name = self.series_folder_name if id_string is None else id_string
+
+        if full_path.endswith('nii.gz'):
+            print('loading series from NIfTI')
+            # data, pixel_spacing, image_ids, dicom_details, slice_locations, trigger_times, image_positions, is3D, multifile = dataArrayFromNifti(full_path)
+            # self.orientation = [0,1,0,1,0,0]
+
+            (data, pixel_spacing, image_ids, dicom_details,
+            slice_locations, trigger_times, image_positions,
+            is3D, multifile, orientation) = dataArrayFromNifti(full_path)
+            self.orientation = orientation
         
-        # Load DICOM data and metadata
-        (data, pixel_spacing, image_ids, dicom_details,
-         slice_locations, trigger_times, image_positions,
-         is3D, multifile) = dataArrayFromDicom(full_path)
+        else:
+            # Load DICOM data and metadata
+            (data, pixel_spacing, image_ids, dicom_details,
+            slice_locations, trigger_times, image_positions,
+            is3D, multifile) = dataArrayFromDicom(full_path)
         
-        # Store DICOM metadata
-        self.orientation = np.array(list(dicom_details['ImageOrientation']))
+            # Store DICOM metadata
+            self.orientation = np.array(list(dicom_details['ImageOrientation']))
+
         self.data = data
         self.pixel_spacing = pixel_spacing
         self.image_ids = image_ids

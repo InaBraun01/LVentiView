@@ -23,6 +23,8 @@ from scipy.spatial.transform import Rotation
 import matplotlib.pyplot as plt
 import meshio
 import pickle
+import time
+import random
 from scipy.ndimage.morphology import binary_fill_holes as bfh
 
 # Set device for PyTorch computations
@@ -48,11 +50,13 @@ def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
         - Uses full-scaled model for sz >= 96 (typically for human studies)
     """
     # Load the mean/average mesh model
-    if sz < 96:
+    if sz < 80:
         # Use half-scaled model for smaller left ventricles (e.g., monkey studies)
         mean_mesh_file = os.path.join(model_dir, 'Mean/LV_mean_half_scaled.vtk')
+        print("Monkey")
     else:
         # Use full-scaled model for larger left ventricles (e.g., human studies)
+        print("Human")
         mean_mesh_file = os.path.join(model_dir, 'Mean/LV_mean_scaled.vtk')
 
 
@@ -83,25 +87,16 @@ def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
     # Subsample control points based on frequency parameter
     exterior_points_index = exterior_points_index[::cp_frequency]
 
-
     # Create reduced PCA matrix for control points
     PHI3 = np.reshape(np.array(PHI), (n_points, 3, num_modes), order='F')
     PHI3 = PHI3[exterior_points_index, :, :num_modes]
     PHI3 = np.reshape(PHI3, (-1, num_modes), order='F')
 
-
-
     # Calculate mean mode coefficients
     mean_modes = np.dot(meshio.read(mean_mesh_file).points.reshape((-1,), order='F'), np.array(PHI))
 
-
-    # Define mesh offset for pixel space transformation
-    mesh_offset = np.array([sz, sz, 2*sz])  # Optimized for SAX slices
-
-    # Transform control points to normalized coordinates [0,1]
-    starting_cp = (mesh_1.points[exterior_points_index] + mesh_offset) / (2*sz)
-
-
+    # # Transform control points to normalized coordinates [0,1]
+    # starting_cp = (mesh_1.points[exterior_points_index] - mesh_origin) / sz
 
     # Define normalized mesh coordinate system axes
     mesh_vpc = np.array([0.9, 0., 0.])  # Ventricular-pulmonary commissure
@@ -109,11 +104,10 @@ def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
     mesh_rv_direction = np.array([0., -0.75, -1.])  # Right ventricle direction
     mesh_axes = [mesh_vpc, mesh_sax_normal, mesh_rv_direction]
 
-    return (mesh_1, starting_cp, PHI3, PHI, mode_bounds, mean_modes, 
-            mesh_offset, mesh_axes)
+    return (mesh_1, mesh_1.points[exterior_points_index], PHI3, PHI, mode_bounds, mean_modes, mesh_axes)
 
 
-def voxelizeUniform(mesh, sz, gridsize=None, offset=None, bp_channel=False):
+def voxelizeUniform(mesh, sz, gridsize=None, bp_channel=False):
     """
     Convert a 3D mesh to a voxelized representation on a uniform grid.
     
@@ -128,24 +122,42 @@ def voxelizeUniform(mesh, sz, gridsize=None, offset=None, bp_channel=False):
         numpy.ndarray or tuple: Voxelized mesh as boolean array.
                                If bp_channel=True, returns (myocardium, blood_pool) tuple
     """
-    # Set default 
-    if offset is None:
-        offset = np.array([sz, sz, 2*sz])
+
+    z_res=64
+
+    resolution = (sz, sz, z_res)
 
     if gridsize is None:
-        gridsize = 2*sz
-        
-    resolution = (sz, sz, sz)
+        gridsize =  sz
 
-    # Use PyVista for mesh sampling
-    meshio.write('tmp.vtk', mesh)  # Temporary file for PyVista
-    model = pv.read('tmp.vtk')
+    spacing = (gridsize / sz, gridsize / sz, gridsize / z_res)
 
-    # Create uniform grid
+    # Create unique filename using time and a random int
+    timestamp = int(time.time() * 1e6)  # microseconds
+    randint = random.randint(0, 99999)
+    tmp_filename = f"tmp_{timestamp}_{randint}.vtk"
+
+    # Save mesh and read with PyVista
+    meshio.write(tmp_filename, mesh)
+    model = pv.read(tmp_filename)
+    # Delete temporary file
+    os.remove(tmp_filename)
+
+    # Determine origin based on mesh bounds
+    bounds = np.array(model.bounds)
+    center = np.array([
+        (bounds[1] + bounds[0]) / 2,
+        (bounds[3] + bounds[2]) / 2,
+        (bounds[5] + bounds[4]) / 2,
+    ])
+    origin = center - 0.5 * np.array(resolution) * spacing
+
+    # Create grid
     grid = pv.UniformGrid()
     grid.dimensions = resolution
-    grid.spacing = (gridsize/resolution[0], gridsize/resolution[1], gridsize/resolution[2])
-    grid.origin = -offset
+    grid.spacing = spacing
+
+    grid.origin = origin
 
     # Sample mesh onto grid
     sampled = grid.sample(model)
@@ -177,9 +189,9 @@ def voxelizeUniform(mesh, sz, gridsize=None, offset=None, bp_channel=False):
                 filled[k] = filled[k] * 0
 
         filled = np.moveaxis(np.array(filled), 0, -1)
-        return binary, filled
+        return binary, filled, origin
 
-    return binary
+    return binary, origin
 
 
 class evalLearnedInputs():
@@ -272,37 +284,36 @@ def ampsToPoints(amps, PHI=None):
 
 
 def set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se):
-	"""
-	Align the initial mesh orientation with the DICOM image coordinate system.
+    """
+    Align the initial mesh orientation with the DICOM image coordinate system.
 
-	Args:
-		dicom_exam: DICOM examination data containing orientation information
-		mesh_axes: Mesh coordinate system axes
-		warp_and_slice_model: Model for mesh warping and slicing
-		se: Slice extraction model
-	"""
-	# Get initial mesh coordinate system
-	initial_mesh_vpc, initial_mesh_sax_normal, initial_mesh_rv_direction = transformMeshAxes(
-		mesh_axes, dicom_exam.sz, 0, np.eye(3))
+    Args:
+        dicom_exam: DICOM examination data containing orientation information
+        mesh_axes: Mesh coordinate system axes
+        warp_and_slice_model: Model for mesh warping and slicing
+        se: Slice extraction model
+    """
+    # Get initial mesh coordinate system
+    initial_mesh_vpc, initial_mesh_sax_normal, initial_mesh_rv_direction = transformMeshAxes(
+        mesh_axes, dicom_exam.sz, 0, np.eye(3))
 
-	# Calculate rotation to align mesh SAX normal with DICOM SAX normal
-	rotM = getRotationMatrix(initial_mesh_sax_normal, dicom_exam.sax_normal)
-	new_mesh_rv_direction = np.dot(rotM, initial_mesh_rv_direction)
+    # Calculate rotation to align mesh SAX normal with DICOM SAX normal
+    rotM = getRotationMatrix(initial_mesh_sax_normal, dicom_exam.sax_normal)
+    new_mesh_rv_direction = np.dot(rotM, initial_mesh_rv_direction)
 
-	# Determine valve direction from DICOM data
-	valve_direction = dicom_exam.aortic_valve_direction
+    # Determine valve direction from DICOM data
+    valve_direction = dicom_exam.aortic_valve_direction
+    # # Calculate additional rotation for RV direction alignment
+    rotM2 = getRotationMatrix(new_mesh_rv_direction, valve_direction)
+    rotM = np.dot(rotM2, rotM)
 
-	# Calculate additional rotation for RV direction alignment
-	rotM2 = getRotationMatrix(new_mesh_rv_direction, valve_direction)
-	rotM = np.dot(rotM2, rotM)
+    # Convert to Euler angles
+    euler_rot = np.array(Rotation.from_matrix(rotM).as_euler('xyz'))
 
-	# Convert to Euler angles
-	euler_rot = np.array(Rotation.from_matrix(rotM).as_euler('xyz'))
-
-	# Apply rotation to models
-	with torch.no_grad():
-		warp_and_slice_model.initial_alignment_rotation += torch.Tensor(euler_rot).to(device)
-		se.initial_alignment_rotation += torch.Tensor(euler_rot).to(device)
+    # Apply rotation to models
+    with torch.no_grad():
+        warp_and_slice_model.initial_alignment_rotation += torch.Tensor(euler_rot).to(device)
+        se.initial_alignment_rotation += torch.Tensor(euler_rot).to(device)
 
 
 def getRotationMatrix(A, B):
@@ -406,7 +417,7 @@ def resetModel(learned_inputs, eli, use_bp_channel, sz, mesh_offset, ones_input,
         msh = eli()
 
         # Use the dedicated function for voxelization
-        mean_arr_batch = prepare_voxelized_mean_array(msh, sz, use_bp_channel, mesh_offset, device)
+        mean_arr_batch, origin = prepare_voxelized_mean_array(msh, sz, use_bp_channel, device)
 
         # Update model with initial parameters
         modes_output, _, _, _, _ = learned_inputs(ones_input)
@@ -452,7 +463,7 @@ def getTensorLabelsAndInputImage(dicom_exam, time_frame):
     return tensor_labels
 
 
-def prepare_voxelized_mean_array(mesh, sz, use_bp_channel, mesh_offset, device):
+def prepare_voxelized_mean_array(mesh, sz, use_bp_channel, device):
     """
     Prepare voxelized representation of mesh for neural network processing.
     
@@ -467,17 +478,16 @@ def prepare_voxelized_mean_array(mesh, sz, use_bp_channel, mesh_offset, device):
         torch.Tensor: Voxelized mesh ready for network input
     """
     if use_bp_channel:
-        mean_arr, mean_bp_arr = voxelizeUniform(mesh, sz, bp_channel=use_bp_channel, 
-                                               offset=mesh_offset)
+        mean_arr, mean_bp_arr, origin = voxelizeUniform(mesh, sz, bp_channel=use_bp_channel)
         mean_arr = mean_arr.astype('float')
         mean_arr_batch = torch.Tensor(np.concatenate([mean_arr[None, None], 
                                                      mean_bp_arr[None, None]], axis=1)).to(device)
     else:
-        mean_arr = voxelizeUniform(mesh, sz, bp_channel=use_bp_channel, offset=mesh_offset)
+        mean_arr, origin = voxelizeUniform(mesh, sz, bp_channel=use_bp_channel)
         mean_arr = mean_arr.astype('float')
         mean_arr_batch = torch.Tensor(np.tile(mean_arr[None, None], (1, 1, 1, 1, 1))).to(device)
-    
-    return mean_arr_batch
+
+    return mean_arr_batch, origin
 
 
 def init_random_start_mesh(learned_inputs, device):
@@ -541,13 +551,8 @@ def save_results_post_training(dicom_exam, outputs, time_frame, eli, se, sz, use
     msh, modes, rescale_modes = eli(just_mesh=False)
     mesh_render = getSlices(se, msh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input)
     
-    # Calculate final Dice coefficient
-    mcolor = np.transpose(mesh_render.detach().cpu().numpy()[0], (3, 1, 2, 0))
-    pred = np.transpose(outputs.detach().cpu().numpy()[0], (3, 1, 2, 0)) > 0
-    target = np.transpose(tensor_labels.detach().cpu().numpy()[0], (3, 1, 2, 0))
-    
-    slice_dice, has_target = slicewiseDice(pred[..., 0:1], target[..., 0:1])
-    end_dice = np.sum(slice_dice) / np.sum(has_target)
+    d0 = dice_loss(outputs[:,:1], tensor_labels[:,:1])  # Myocardium
+    d1 = dice_loss(outputs[:,1:], tensor_labels[:,1:])  # Blood pool
 
     # Store results in DICOM exam object
     dicom_exam.fitted_meshes[time_frame] = {}
@@ -571,7 +576,7 @@ def save_results_post_training(dicom_exam, outputs, time_frame, eli, se, sz, use
             for coefficient in rescale_modes:
                 writer.writerow([coefficient])
     
-    return end_dice
+    return d0.item() ,d1.item()
 
 
 def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input):
@@ -595,7 +600,7 @@ def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_in
     per_slice_offsets = torch.cat([y_shifts * 0, y_shifts, x_shifts], dim=-1)
 
     # Use the dedicated function for voxelization
-    mean_arr_batch = prepare_voxelized_mean_array(mesh, sz, use_bp_channel, mesh_offset, device)
+    mean_arr_batch, origin = prepare_voxelized_mean_array(mesh, sz, use_bp_channel, device)
 
     # Extract slices using the slice extraction model
     result = se([mean_arr_batch, global_offsets, per_slice_offsets, global_rotations])
@@ -633,3 +638,41 @@ def slicewiseDice(arr1, arr2):
         has_target.append((np.sum(arr2[i]) > 0) * 1)  # Binary indicator for target presence
 
     return np.array(slice_dice), np.array(has_target)
+
+
+def dice_loss(pred, target, slice_weights=1):
+    """
+    Compute Dice loss for segmentation evaluation.
+    
+    The Dice loss is computed as 1 - Dice coefficient, where the Dice coefficient
+    measures the overlap between predicted and target segmentation masks.
+    
+    Args:
+        pred (torch.Tensor): Predicted segmentation probabilities/masks
+                            Shape: (batch, channels, height, width, depth)
+        target (torch.Tensor): Ground truth segmentation masks  
+                              Shape: (batch, channels, height, width, depth)
+        slice_weights (float or torch.Tensor): Weighting factor for different slices
+    
+    Returns:
+        torch.Tensor: Mean Dice loss across all samples and channels
+        
+    Note:
+        - Small epsilon (0.00001) added to numerator and denominator for numerical stability
+        - Loss is averaged across all spatial dimensions (0,1,2,3)
+        - Final loss is weighted by slice_weights parameter
+    """
+    # Calculate intersection (numerator of Dice coefficient)
+    # Sum over batch, channel, height, width dimensions
+    numerator = 2 * torch.sum(pred * target, axis=(0,1,2,3))
+    
+    # Calculate union (denominator of Dice coefficient) 
+    # Sum of predicted and target masks
+    denominator = torch.sum(pred + target, axis=(0,1,2,3))
+    
+    # Compute Dice coefficient with numerical stability
+    # Add small epsilon to avoid division by zero
+    dloss = (numerator + 0.00001) / (denominator + 0.00001)
+    
+    # Return mean loss across all computed values
+    return torch.mean(dloss)

@@ -138,22 +138,12 @@ def dataArrayFromDicomFolder(PathDicom):
     multifile = True
 
 
-    # remove_indices, remove_slices = [32,39],[2,6]
-    # remove_zstacks = True
+    # flipped_data = data[:,::-1,:,:]
 
-    # # Use a list comprehension to create a mask of indices to keep
-    # keep_indices = [i for i in range(data.shape[0]) if i not in remove_indices]
+    # flipped_image_ids = image_ids[:, ::-1]
+    # flipped_slice_locations = slice_locations[::-1]
 
-    # # Create a new array with only the desired time frames
-    # filtered_data = data[keep_indices, ...]
-
-    # if remove_zstacks == True:
-    #     filtered_data = filtered_data[:, remove_slices[0]:-remove_slices[1], :, :]
-
-    # data = filtered_data
-
-    # print(data.shape)
-    # sys.exit()
+    # flipped_image_positions =  image_positions[::-1] #flip list
 
     return data, ConstPixelSpacing, image_ids, dicom_dir_details, slice_locations, trigger_times, image_positions, is3D, multifile
 
@@ -199,3 +189,28 @@ def dataArrayFromDicomSingleFile(PathDicom):
     multifile = False
 
     return imgdata[None], (0.45, 0.45, 0.45), None, dicom_dir_details, None, None, None, is3D, multifile
+
+
+def dataArrayFromNifti(full_path):
+
+    import nibabel as nib
+    img = nib.load(full_path)
+    hdr = img.header
+
+    data = np.transpose(img.get_fdata(), (3,2,0,1))
+    pixel_spacing = [hdr.get('pixdim')[3], hdr.get('pixdim')[1], hdr.get('pixdim')[2]]
+
+    image_ids = None
+    dicom_details = None
+    slice_locations = [0 for k in range(data.shape[1])]
+    # self.image_positions = [[0,0,-k*self.pixel_spacing[0]] for k in range(self.data.shape[1])]
+    image_positions = [[0,0,k*pixel_spacing[0]] for k in range(data.shape[1])]
+    trigger_times = None
+    is3D = False
+    multifile = None
+    orientation = [0,1,0,1,0,0]
+    # orientation = [1,0,0,1,0,0]
+    # name += 'sax_stack'
+
+
+    return (data, pixel_spacing, image_ids, dicom_details, slice_locations, trigger_times, image_positions, is3D,multifile, orientation)

@@ -230,6 +230,64 @@ class DicomExam:
                 series.prepped_data[:, :, ::ds, ::ds], axis=2))
             img = to3Ch(img)
 
+            # data = series.prepped_data
+
+            # output_folder = "/data.lfpn/ibraun/Code/paper_volume_calculation/GUI_Results/Graphics/Segmentation_Mesh_Fitting_Flow"
+            # times = [2,16,38]
+            # z_heights = [0,4,8,11,15]
+            # os.makedirs(output_folder, exist_ok=True)
+
+            # for t in times:
+            #     for z in z_heights:
+            #         img = data[t, z, :, :]  # 2D slice at time t and height z
+
+            #         # Save using matplotlib
+            #         plt.imsave(
+            #             fname=os.path.join(output_folder, f"Seg_Masks_t{t}_z{z}.pdf"),
+            #             arr=img,
+            #             cmap='gray'  # Use 'gray' or change as needed
+            #         )
+
+            # Save overlaid segmentation and MRI slices
+            # if seg_data is not None:
+            #     for t in times:
+            #         for z in z_heights:
+            #             mri_slice = data[t, z, :, :]         # (H, W) grayscale
+            #             seg_slice = seg_data[t, z, :, :]     # (H, W) labels
+
+            #             # Convert to 3-channel RGB
+            #             mri_rgb = to3Ch(mri_slice)           # Grayscale → RGB
+            #             seg_rgb = to3Ch(seg_slice)           # Labels → RGB
+
+            #             overlay = mri_rgb + 0.8 * seg_rgb
+            #             overlay = overlay / overlay.max()  # scale down if >1
+            #             overlay = np.clip(overlay, 0, 1)
+
+            #             # Convert to uint8
+            #             overlay_uint8 = (overlay * 255).astype('uint8')
+
+            #             # Save to file
+            #             filename = f"Overlay_t{t}_z{z}.pdf"
+            #             filepath = os.path.join(output_folder, filename)
+            #             imageio.imwrite(filepath, overlay_uint8)
+
+            # data_seg = series.prepped_seg
+            # output_folder = "/data.lfpn/ibraun/Code/paper_volume_calculation/GUI_Results/Graphics/Segmentation_Mesh_Fitting_Flow"
+            # times = [2,39]
+            # z_heights = [0,4,8,11,15]
+            # os.makedirs(output_folder, exist_ok=True)
+
+            # for t in times:
+            #     for z in z_heights:
+            #         img = data_seg[t, z, :, :]  # 2D slice at time t and height z
+
+            #         # Save using matplotlib
+            #         plt.imsave(
+            #             fname=os.path.join(output_folder, f"Seg_Masks_t{t}_z{z}.png"),
+            #             arr=img,
+            #             cmap='gray'  # Use 'gray' or change as needed
+            #         )
+
 
             if seg_data is not None:
                 #Downsample the segmentation and convert it to RGB format
@@ -273,6 +331,7 @@ class DicomExam:
         for series in self:
             if series.view != 'SAX':
                 continue
+
                 
             # Skip if heuristics not available
             if series.VP_heuristic2 is None:
@@ -388,7 +447,6 @@ class DicomExam:
             for k in range(len(series.XYZs)):
                 # Center of current slice
                 slice_center = np.mean(series.XYZs[k], axis=0)
-                print(f"slice_center: {slice_center}")
                 
                 # Normalize SAX normal vector
                 n = self.sax_normal / np.linalg.norm(self.sax_normal, 2)
@@ -400,6 +458,7 @@ class DicomExam:
                 # Calculate distance from center along normal
                 dist_from_center = np.mean((intersection_point - self.center) / 
                                          self.sax_normal)
+
                 series.distance_from_center.append(dist_from_center)
                 
                 # Track most basal slice

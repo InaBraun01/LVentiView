@@ -11,6 +11,8 @@ import csv
 from copy import deepcopy
 from scipy.spatial.transform import Rotation
 
+import matplotlib.pyplot as plt
+
 # Custom utility imports
 import Python_Code.Utilis.fit_mesh_utils as ut
 from Python_Code.Utilis.fit_mesh_models import SliceExtractor, makeFullPPModelFromDicom
@@ -91,11 +93,14 @@ def fit_mesh(dicom_exam,
     create_output_folders(dicom_exam, ['meshes'])
 
     # Load shape model components
-    (mesh_1, starting_cp, PHI3, PHI, mode_bounds, mode_means, 
-        mesh_offset, mesh_axes) = ut.load_ShapeModel(num_modes, sz, cp_frequency=cp_frequency, model_dir=mesh_model_dir)
+    (mesh_1, exterioror_mesh_points, PHI3, PHI, mode_bounds, mode_means, mesh_axes) = ut.load_ShapeModel(num_modes, sz, cp_frequency=cp_frequency, model_dir=mesh_model_dir)
 
     # Prepare voxelized mean mesh for input
-    mean_arr_batch = ut.prepare_voxelized_mean_array(mesh_1, sz, use_bp_channel, mesh_offset, device)
+    mean_arr_batch, mesh_origin = ut.prepare_voxelized_mean_array(mesh_1, sz, use_bp_channel, device)
+    
+    #normalize starting cp
+    starting_cp = (exterioror_mesh_points - mesh_origin) / sz
+
     ones_input = torch.Tensor(np.ones((1, 1))).to(device)
 
     # Initialize model components
@@ -107,7 +112,7 @@ def fit_mesh(dicom_exam,
                         series_to_exclude=series_to_exclude)
 
     (pcaD, warp_and_slice_model, learned_inputs,
-        li_model) = makeFullPPModelFromDicom(sz, num_modes, starting_cp, dicom_exam, mode_bounds, mode_means, PHI3, mesh_offset,
+        li_model) = makeFullPPModelFromDicom(sz, num_modes, starting_cp, dicom_exam, mode_bounds, mode_means, PHI3, -mesh_origin, mesh_origin,
                                              allow_global_shift_xy=allow_global_shift_xy,
                                              allow_global_shift_z=allow_global_shift_z,
                                              allow_slice_shift=allow_slice_shift,
@@ -133,7 +138,7 @@ def fit_mesh(dicom_exam,
 
         # Reset model state if re-fitting
         if rep != 0:
-            ut.resetModel(learned_inputs, eli, use_bp_channel, sz, mesh_offset, ones_input, pcaD, warp_and_slice_model)
+            ut.resetModel(learned_inputs, eli, use_bp_channel, sz, -mesh_origin, ones_input, pcaD, warp_and_slice_model)
 
         for idx, time_frame in enumerate(tf_to_fit):
             message = f"Fitting time-frame {time_frame} ({idx+1}/{len(tf_to_fit)})"
@@ -170,7 +175,7 @@ def fit_mesh(dicom_exam,
                 train_mode,
                 steps_between_fig_saves,
                 steps_between_progress_update,
-                mesh_offset,
+                -mesh_origin,
                 myo_weight=1,
                 bp_weight=500,
                 ts3=(training_steps / 3),
@@ -181,7 +186,7 @@ def fit_mesh(dicom_exam,
             with torch.no_grad():
                 end_dice = ut.save_results_post_training(
                     dicom_exam, outputs, time_frame, eli, se, sz, use_bp_channel,
-                    mesh_offset, learned_inputs, tensor_labels)
+                    -mesh_origin, learned_inputs, tensor_labels)
                 end_dices.append(end_dice)
 
     # Final processing: mask generation for fitted meshes

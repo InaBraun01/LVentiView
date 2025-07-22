@@ -45,8 +45,8 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
     # # bp_weight = 1
     # print(myo_weight)
     # Calculate weighted Dice losses for different anatomical structures
-    d0 = dice_loss(pred[:,:1], target[:,:1], slice_weights) * myo_weight  # Myocardium
-    d1 = dice_loss(pred[:,1:], target[:,1:], slice_weights) * bp_weight   # Blood pool
+    d0 = one_minus_dice_loss(pred[:,:1], target[:,:1], slice_weights) * myo_weight  # Myocardium
+    d1 = one_minus_dice_loss(pred[:,1:], target[:,1:], slice_weights) * bp_weight   # Blood pool
 
     # print(f"Myocardium: {d0}")
     # print(f"Blood pool: {d1}")
@@ -66,10 +66,11 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
     # print(target.sum())
 
     # sys.exit()
-    # rows = 9
+    # rows = 8
     # fig, axs = plt.subplots(rows,2)
     # # Plot each mask
     # for row in range(rows):
+
     #         mask_pred = pred[:,:,row]
     #         im = axs[row,0].imshow(mask_pred, cmap='viridis', interpolation='nearest')
             
@@ -89,7 +90,7 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
     
     # # Adjust layout and display
     # plt.tight_layout()
-    # plt.savefig("test_2.png")
+    # plt.savefig("test_2_new.png")
     # sys.exit()
     
     # Combine segmentation losses
@@ -104,7 +105,7 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
     return d_loss, modes_loss, global_shift_loss, rotation_loss, slice_shift_loss
 
 
-def dice_loss(pred, target, slice_weights=1):
+def one_minus_dice_loss(pred, target, slice_weights=1):
     """
     Compute Dice loss for segmentation evaluation.
     

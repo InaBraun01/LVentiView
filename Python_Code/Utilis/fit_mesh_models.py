@@ -1,8 +1,10 @@
 import sys
+import csv
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import matplotlib.pyplot as plt
 
 from Python_Code.Utilis.fit_mesh_models_utils import makeSliceCoordinateSystems, rotation_tensor
 from Python_Code.Utilis.interpolate_spline import interpolate_spline
@@ -63,6 +65,11 @@ class SliceExtractor(torch.nn.Module):
         for s in dicom_exam:
             if s.name not in series_to_exclude:
                 slices.extend(s.XYZs)   # Each s.XYZs is an array of world coordinates per slice
+                # Concatenate all slice coordinates into one big array
+                all_xyz_coords = np.concatenate(s.XYZs, axis=0)  # Shape: (total_voxels, 3)
+
+                # Compute the minimum coordinate along each axis (x, y, z)
+                volume_origin = np.min(all_xyz_coords, axis=0)
         
         # Total number of 2D slices across all included series
         self.num_slices = len(slices)
@@ -76,8 +83,11 @@ class SliceExtractor(torch.nn.Module):
         # Normalize grid to be centered and isotropic in DICOM space
         center = dicom_exam.center
 
+        # self.grid = (self.grid - center) / dicom_exam.sz
 
-        self.grid = (self.grid - center) / dicom_exam.sz
+        self.grid = (self.grid - volume_origin)
+
+        self.grid = 2 * (self.grid / (self.vol_shape)) - 1
         self.grid = torch.Tensor(self.grid).to(device)
 
     def forward(self, args):
@@ -190,14 +200,26 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         #only take into consideration slices that should not be excluded
         for s in dicom_exam:
             if s.name not in series_to_exclude:
-                slices.extend(s.XYZs) # Each s.XYZs is an array of world coordinates per slice
+                slices.extend(s.XYZs) # Each s.XYZs is an array of world coordinates per slices
+
+                # Concatenate all slice coordinates into one big array
+                all_xyz_coords = np.concatenate(s.XYZs, axis=0)  # Shape: (total_voxels, 3)
+
+                # Compute the minimum coordinate along each axis (x, y, z)
+                volume_origin = np.min(all_xyz_coords, axis=0)
+
+
         self.num_slices = len(slices)
         self.grid = np.concatenate(slices)[None]
-        center = dicom_exam.center
-        self.grid = (self.grid - center) / dicom_exam.sz
+        self.grid = (self.grid - volume_origin)
+
+        self.grid = 2 * (self.grid / (self.vol_shape)) - 1
+
         self.grid = torch.Tensor(self.grid).to(device)
+
         # Create an orientation (local coordinate system) for each slice
         self.coordinate_system = torch.Tensor(makeSliceCoordinateSystems(dicom_exam)).to(device)
+
 
     def forward(self, args):
         """
@@ -221,6 +243,7 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         # --- Global Rotation ---
         # If rotation is allowed, use global rotations + initial alignment;
         # otherwise set rotation weight to zero, disabling it.
+
         r_weight = 1 if self.allow_rotations else 0
         R = rotation_tensor(
             global_rotations[..., :1] * r_weight + self.initial_alignment_rotation[0],  # yaw
@@ -230,7 +253,7 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
             device=device
         )
 
-        # Apply rotation to the sampling grid
+        #Apply rotation to the sampling grid
         batched_grid = torch.bmm(batched_grid, R)  # (B, N, 3) x (B, 3, 3) -> (B, N, 3)
 
         # Rotate the coordinate system vectors (used for per-slice offset)
@@ -262,6 +285,7 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
             # Flatten back to shape [1, N, 3] for interpolation
             batched_grid = batched_grid.view(1, -1, 3)
 
+
         # --- Spline Interpolation ---
         #Interpolates how each point in batched_grid is defomed based on control points using B-spline
         #for warp points I know deformed position as well as undeformed position
@@ -273,15 +297,33 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
             order=1  # Linear interpolation
         ).view(-1, self.num_slices, self.vol_shape[0], self.vol_shape[1], 3)
 
+
         # Rearrange dimensions to [B, D, H, W, 3] for grid_sample
         interpolated_sample_locations = interpolated_sample_locations.permute(0, 2, 3, 1, 4)
+
+        # Flatten all dimensions except the last one (which should be the 3D coordinates)
+        flat_coords = interpolated_sample_locations.reshape(-1, 3)
+
+        # Compute min and max per axis (X, Y, Z)
+        min_vals = flat_coords.min(dim=0).values
+        max_vals = flat_coords.max(dim=0).values
+
+        z_min = min_vals[0]
+        z_max = max_vals[0]
+
+        # File to append to
+        csv_file = "z_bounds_log.csv"
+
+        # Append mode
+        with open(csv_file, mode='a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([z_min.item(), z_max.item()])  # Just Z bounds
 
         # --- Sample the Volume ---
         # you sample the original volume (vol) at the undeformed positions that correspond to the deformed voxel locations.
         # Thus, it tells you for each voxel in the deformed location wether it was 
         # inside or outside the original segmentation mask.
         res = F.grid_sample(vol, interpolated_sample_locations, align_corners=True, mode='bilinear')
-
         return res
 
 
@@ -328,6 +370,7 @@ class LearnableInputPPModel(torch.nn.Module):
         # Apply the warping and slicing model to get predicted 2D slices
         predicted_slices = self.warp_and_slice_model([
             predicted_cp, voxelized_mean_mesh, volume_shift, slice_shifts, global_rotations])
+
         
         # Return all outputs for further loss computation, analysis, or optimization
         return predicted_slices, modes_output, volume_shift, global_rotations, predicted_cp, slice_shifts
@@ -338,7 +381,7 @@ class PCADecoder(torch.nn.Module):
     Decodes low-dimensional PCA shape modes into full mesh control points.
     Handles de-normalization, scaling, and translation of the mesh.
     """
-    def __init__(self, num_modes, num_points, mode_bounds, mode_means, offset, sz, scale=128):
+    def __init__(self, num_modes, num_points, mode_bounds, mode_means, offset, mesh_origin, scale=64):
         super().__init__()
         # Compute the scaling (span) and mean for each mode for de-normalization
         self.mode_spans = torch.Tensor((mode_bounds[:,1] - mode_bounds[:,0]) / 2).to(device)
@@ -347,6 +390,7 @@ class PCADecoder(torch.nn.Module):
 		#correspond to the scale used when you generated the meshes that PCA components were derived from
         #meshes were generated on a 128x128 grid
         self.scale = scale 
+        self.mesh_origin = mesh_origin
         self.num_points = num_points
         # Linear transformation from modes to all mesh coordinates
         # Weights of linear projection are set as PCA components
@@ -366,8 +410,16 @@ class PCADecoder(torch.nn.Module):
         mesh_points = self.fc1(x)                                              # [batch_size, 3*num_points]
         mesh_points = mesh_points.view(batch_size, 3, self.num_points)         # [batch_size, 3, num_points]
         mesh_points = torch.transpose(mesh_points, 1, 2)                       # [batch_size, num_points, 3]
-        # Final translation and global scaling
-        mesh_points = (mesh_points + self.offset) / self.scale
+
+        # Ensure origin is a tensor on the same device
+        origin_tensor = torch.tensor(self.mesh_origin, dtype=mesh_points.dtype, device=mesh_points.device)
+
+        # Convert scale to tensor if needed (broadcastable)
+        scale_tensor = torch.tensor(self.scale, dtype=mesh_points.dtype, device=mesh_points.device)
+
+        # Apply normalization
+        mesh_points = (mesh_points - origin_tensor) / scale_tensor
+
         return mesh_points
 
 
@@ -414,7 +466,7 @@ class learnableInputs(torch.nn.Module):
 
 def makeFullPPModelFromDicom(
     sz, num_modes, starting_cp, dicom_exam, 
-    mode_bounds, mode_means, PHI3, offset,
+    mode_bounds, mode_means, PHI3, offset, mesh_origin,
     allow_global_shift_xy=True, allow_global_shift_z=True,
     allow_slice_shift=False, allow_rotations=False, 
     series_to_exclude=[]
@@ -426,7 +478,7 @@ def makeFullPPModelFromDicom(
         Tuple of (pcaD, warp_and_slice_model, learned_inputs, li_model)
     """
     warp_and_slice_model = GivenPointSliceSamplingSplineWarpSSM(
-        (sz,sz,sz), starting_cp[None], dicom_exam, 
+        (sz,sz,sz), starting_cp[None], dicom_exam,
         allow_global_shift_xy=allow_global_shift_xy,
         allow_global_shift_z=allow_global_shift_z,
         allow_slice_shift=allow_slice_shift,
@@ -440,7 +492,7 @@ def makeFullPPModelFromDicom(
 
     #initalize PCADecoder weights with PCA componetes mapping output PCA coefficients to meshes 
     #initalize biases with 0
-    pcaD = PCADecoder(num_modes, num_points, mode_bounds[:num_modes], mode_means[:num_modes], offset=offset, sz = sz)
+    pcaD = PCADecoder(num_modes, num_points, mode_bounds[:num_modes], mode_means[:num_modes], offset=offset, scale = sz, mesh_origin = mesh_origin)
     with torch.no_grad():
         pcaD.fc1.weight = nn.Parameter(torch.Tensor(PHI3))
         pcaD.fc1.bias.fill_(0.)
@@ -454,7 +506,7 @@ def makeFullPPModelFromDicom(
             m.weight.fill_(0.)
             m.bias.fill_(0.)
 
-    li_model = LearnableInputPPModel(learned_inputs, pcaD, warp_and_slice_model)
+    li_model = LearnableInputPPModel(learned_inputs, pcaD, warp_and_slice_model,)
     li_model.to(device)
 
     return pcaD, warp_and_slice_model, learned_inputs, li_model

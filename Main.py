@@ -11,15 +11,15 @@ from Python_Code.Utilis.analysis_utils import compute_cardiac_parameters,calcula
 from Python_Code.Segmentation import segment
 from Python_Code.Utilis.load_DicomExam import loadDicomExam
 from Python_Code.Mesh_fitting import fit_mesh
-from Python_Code.Utilis.clean_MRI_utils import estimateValvePlanePosition, estimate_MRI_orientation
+from Python_Code.Utilis.clean_MRI_utils import estimateValvePlanePosition #, estimate_MRI_orientation
 
 local_path    = os.getcwd()
 
-data_dir = local_path + '/Data_healthy/'
-# data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Patient_data/Healthy/'
+# data_dir = local_path + '/Data_healthy/'
+data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Patient_data/Healthy/'
 
 # data_dir = "/data.lfpn/ibraun/Code/paper_volume_calculation/Human_data"
-output_folder='test_segmentation'
+output_folder='test/lr_095_dw_1000' 
 
 # output_folder = 'outputs_healthy_GUI'
 
@@ -27,7 +27,7 @@ output_folder='test_segmentation'
 # datasets = ['Baker', 'Blasius', 'Bobo' ,'Borris' , 'Corbinian', 'Gaerry', 'Gandalf', 'Gisbert', 'Jasper', 'Louie',
 # 			'Mae', 'Maike', 'Norman', 'Palmiro', 'Prosper', 'Tibor', 'Ulita', 'Ursetta', 'Welle'] #list of all datasets for which the code should be run
 
-datasets = ['Welle']
+# datasets = ['Welle']
 
 # #heart failure infarct datasets
 # datasets = ['SCD0000101','SCD0000201','SCD0000301','SCD0000401','SCD0000501','SCD0000601', 'SCD0000701','SCD0000801','SCD0000901','SCD0001001','SCD0001101','SCD0001201']
@@ -41,7 +41,7 @@ datasets = ['Welle']
 # #Healthy datasets
 # datasets = ['SCD0003701','SCD0003801','SCD0003901','SCD0004001','SCD0004101','SCD0004201','SCD0004301','SCD0004401','SCD0004501']
 
-# datasets = ['SCD0003701']
+datasets = ['SCD0003701']
 
 # datasets = ['Patient077']
 # Define valid stages
@@ -95,12 +95,12 @@ for dataset_to_use in datasets:
         #Estimate the planes lying above the LV base
         estimateValvePlanePosition(de)
 
-        print("Cleaning data...")
-        #Clean MRI data based on Segmentations
-        de.clean_data()
+        # print("Cleaning data...")
+        # #Clean MRI data based on Segmentations
+        # de.clean_data()
 
-        print("Estimate MRI orientation...")
-        estimate_MRI_orientation(de)
+        # print("Estimate MRI orientation...")
+        # estimate_MRI_orientation(de)
 
         print("Save Cleaned Visualization of Segmentation Results ..")
         #Save a visualisation of the cleaned MRI data with the generated segmentation masks
@@ -110,7 +110,6 @@ for dataset_to_use in datasets:
         #Calculate landmarks
         de.estimate_landmarks()
     
-
         print("Analyse segmentation masks...")
         compute_cardiac_parameters(de,'seg')
 
@@ -132,10 +131,10 @@ for dataset_to_use in datasets:
 
         print("Running Mesh Fitting...")
         #Fit 3D Volumetric meshes to the generated Segmentation masks
-        end_dices = fit_mesh(de,training_steps=1, time_frames_to_fit=[0], burn_in_length=0, train_mode='normal',
+        end_dices = fit_mesh(de,training_steps=1000, time_frames_to_fit=[6], burn_in_length=0, train_mode='normal',
 		mode_loss_weight = 7.405277111193427e-07, #how strongly to penalise large mode values
 		global_shift_penalty_weigth = 0.3, steps_between_progress_update=100,
-		lr =  0.017379164382135315, num_cycle = 5, num_modes = 25) #fits a mesh to every time frame. Check the function definition for a list of its arguments
+		lr =  0.095, num_cycle = 1, num_modes = 25) #fits a mesh to every time frame. Check the function definition for a list of its arguments
 
         print(f"Myocardium Dice: {end_dices[0][0]:.3f}")
         print(f"Blood Pool Dice: {end_dices[0][1]:.3f}")

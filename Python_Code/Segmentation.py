@@ -63,8 +63,8 @@ def segment(dicom_exam):
         series.seg = zoom(segmentation_mask, zoom_factors, order=0)
         
         # Calculate optimal crop size based on myocardium segmentation
-        # crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y)
-        crop_size = 64
+        #crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y,margin_factor=2.5)
+        crop_size = 90
         crop_sizes.append(crop_size)
 
         # Ensure crop region stays within image bounds
@@ -97,8 +97,6 @@ def segment(dicom_exam):
             
             # Stack coordinates and flatten for easy access
             xyz_coords = np.stack([X_cropped.ravel(), Y_cropped.ravel(), Z_cropped.ravel()], axis=1)
-            sz = 64
-            test = np.concatenate([X_cropped.reshape((sz**2,1)), Y_cropped.reshape((sz**2,1)), Z_cropped.reshape((sz**2,1))])
 
             # print(np.concatenate([X.reshape((sz**2,1)), Y.reshape((sz**2,1)), Z.reshape((sz**2,1))]).sum())
             series.XYZs.append(xyz_coords)
@@ -123,7 +121,6 @@ def segment(dicom_exam):
 
     #calculate crop size for all series in dicom exam
     dicom_exam.sz = int(np.mean(crop_sizes))
-    # dicom_exam.sz = 64
 
 
 def _calculate_optimal_crop_size(segmentation, center_x, center_y, margin_factor=2):
