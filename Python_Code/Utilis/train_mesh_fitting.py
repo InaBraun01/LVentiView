@@ -95,7 +95,7 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
     cooldown=50,
     min_lr=1e-6)
 
-    while should_continue_training(i, dice_history, train_mode, train_steps):
+    while should_continue_training(i, dice_history, train_mode, train_steps, dicom_exam):
 
         # Initialize training variables
         if i > 2*ts3: #linearly decrease blood pool weight during training
@@ -122,7 +122,7 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
         )
         
         # Total loss
-        loss = 1000*dice_loss + modes_loss + global_shift_loss + rotation_loss + slice_shift_loss
+        loss = 5*dice_loss + modes_loss + global_shift_loss + rotation_loss + slice_shift_loss
 
         prev_lr = scheduler.get_last_lr()[0]
         scheduler.step(dice_loss.item())
@@ -167,7 +167,7 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
     return outputs
 
 
-def should_continue_training(i, dice_history, train_mode, train_steps):
+def should_continue_training(i, dice_history, train_mode, train_steps, dicom_exam):
     """
     Determine whether to continue training based on the training mode.
     
@@ -183,9 +183,14 @@ def should_continue_training(i, dice_history, train_mode, train_steps):
 
     #if the dice is very high for both the myocardium and the blood pool stop
     
-    if len(dice_history) > 0 and dice_history[-1][0] >= 0.87:
+    if len(dice_history) > 0 and i > 100 and dice_history[-1][0] >= 0.875:
         print("Dice Scores are high enough Early Stopping activated:")
         print(f'Myocardium dice: {dice_history[-1][0]:.3e}, Blood pool dice: {dice_history[-1][1]:.3e}')
+        # Append current step to CSV
+        with open(dicom_exam.folder['base'] + '/numbers_epochs_fit.csv', 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([i])
+
         return False
 
     if train_mode == 'until_no_progress':
