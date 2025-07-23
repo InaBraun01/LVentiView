@@ -4,14 +4,22 @@ import _pickle as pickle
 import numpy as np
 import pandas as pd
 import csv
+import ast
+import time
 import cProfile
 
 from Python_Code.DicomExam import DicomExam
-from Python_Code.Utilis.analysis_utils import compute_cardiac_parameters,calculate_segmentation_uncertainty, analyze_mesh_volumes
+from Python_Code.Utilis.analysis_utils import (
+    compute_cardiac_parameters,
+    calculate_segmentation_uncertainty,
+    analyze_mesh_volumes,
+    extract_auto_seg_compare_manu_seg,
+    compute_thickness_map
+)
 from Python_Code.Segmentation import segment
 from Python_Code.Utilis.load_DicomExam import loadDicomExam
 from Python_Code.Mesh_fitting import fit_mesh
-from Python_Code.Utilis.clean_MRI_utils import estimateValvePlanePosition #, estimate_MRI_orientation
+from Python_Code.Utilis.clean_MRI_utils import estimateValvePlanePosition , estimate_MRI_orientation
 
 local_path    = os.getcwd()
 
@@ -19,7 +27,7 @@ local_path    = os.getcwd()
 data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Patient_data/Healthy/'
 
 # data_dir = "/data.lfpn/ibraun/Code/paper_volume_calculation/Human_data"
-output_folder='test/lr_095_dw_1000' 
+output_folder='test/test' 
 
 # output_folder = 'outputs_healthy_GUI'
 
@@ -79,13 +87,8 @@ for dataset_to_use in datasets:
         print("Running segmentation...")
         segment(de)
 
-        # save_dir = "/data.lfpn/ibraun/Code/paper_volume_calculation/Segmentation masks"
-        # os.makedirs(save_dir, exist_ok=True)
-        # t = 0
-        # for z in range(de.series[0].prepped_seg.shape[1]):
-        #     filename = os.path.join(save_dir, f"prepped_masks_t{t:02d}_z{z:02d}.npy")
-        #     np.save(filename, de.series[0].prepped_seg[t, z])
-        # sys.exit()
+        print("Saving Automatic Segmentation Masks to Available Manual Segmentation Masks...")
+        extract_auto_seg_compare_manu_seg(de)
 
         print("Save Visualization of Segmentation Results ..")
         #Save a visualisation of the full MRI data with the generated segmentation masks
@@ -99,8 +102,8 @@ for dataset_to_use in datasets:
         # #Clean MRI data based on Segmentations
         # de.clean_data()
 
-        # print("Estimate MRI orientation...")
-        # estimate_MRI_orientation(de)
+        print("Estimate MRI orientation...")
+        estimate_MRI_orientation(de)
 
         print("Save Cleaned Visualization of Segmentation Results ..")
         #Save a visualisation of the cleaned MRI data with the generated segmentation masks
@@ -112,6 +115,9 @@ for dataset_to_use in datasets:
     
         print("Analyse segmentation masks...")
         compute_cardiac_parameters(de,'seg')
+
+        print("Calculate Local Thickness...")
+        compute_thickness_map(de)
 
         print("Saving analysis object...")
         #Save object of type DicomExam as pickel file
@@ -129,15 +135,18 @@ for dataset_to_use in datasets:
         #Remove all meshes previously fitted to the segmentation masks
         de.fitted_meshes = {}
 
+        start_time = time.time()
         print("Running Mesh Fitting...")
         #Fit 3D Volumetric meshes to the generated Segmentation masks
-        end_dices = fit_mesh(de,training_steps=1000, time_frames_to_fit=[6], burn_in_length=0, train_mode='normal',
+        end_dices = fit_mesh(de,training_steps=10000, time_frames_to_fit="all", burn_in_length=0, train_mode='normal',
 		mode_loss_weight = 7.405277111193427e-07, #how strongly to penalise large mode values
 		global_shift_penalty_weigth = 0.3, steps_between_progress_update=100,
 		lr =  0.095, num_cycle = 1, num_modes = 25) #fits a mesh to every time frame. Check the function definition for a list of its arguments
+        end_time = time.time()
 
         print(f"Myocardium Dice: {end_dices[0][0]:.3f}")
         print(f"Blood Pool Dice: {end_dices[0][1]:.3f}")
+        print(f"Fitting took: {end_time - start_time:.3f}s")
 
         print("Save Visualization of Generated Meshes ..")
         #Save a visualisation of the sliced mesh overlying the cleaned MRI images
