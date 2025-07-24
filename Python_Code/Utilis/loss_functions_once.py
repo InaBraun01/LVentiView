@@ -9,6 +9,7 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
                     rotations_weight,
                     myo_weight,
                     bp_weight,
+                    dicom_exam,
                     slice_weights=1):
     """
     Compute mesh fitting loss for cardiac segmentation with shape model regularization.
@@ -46,19 +47,19 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
     rotation_losses = []
     slice_shift_losses = []
 
-    for time_step in range(len(pred)):
+    for index,time_step in enumerate(dicom_exam.time_frames_to_fit):
 
-        d0 = one_minus_dice_loss(pred[time_step][:,:1], target[:,:1,:,:,:,time_step], slice_weights) * myo_weight  # Myocardium
-        d1 = one_minus_dice_loss(pred[time_step][:,1:], target[:,1:,:,:,:,time_step], slice_weights) * bp_weight   # Blood pool
+        d0 = one_minus_dice_loss(pred[index][:,:1], target[:,:1,:,:,:,time_step], slice_weights) * myo_weight  # Myocardium
+        d1 = one_minus_dice_loss(pred[index][:,1:], target[:,1:,:,:,:,time_step], slice_weights) * bp_weight   # Blood pool
         
         # Combine segmentation losses
         d_loss = d0 + d1
         
         # Calculate regularization losses for shape model parameters
-        modes_loss = torch.mean(modes[:,:,time_step]**2) * modes_weigth
-        global_shift_loss = torch.mean(global_shifts[:,:,:,time_step]**2) * global_shifts_weight
-        slice_shift_loss = torch.mean(slice_shifts[time_step]**2) * slice_shifts_weight
-        rotation_loss = torch.mean(rots[:,:,:,time_step]**2) * rotations_weight
+        modes_loss = torch.mean(modes[:,:,index]**2) * modes_weigth
+        global_shift_loss = torch.mean(global_shifts[:,:,:,index]**2) * global_shifts_weight
+        slice_shift_loss = torch.mean(slice_shifts[index]**2) * slice_shifts_weight
+        rotation_loss = torch.mean(rots[:,:,:,index]**2) * rotations_weight
 
         dice_losses.append(d_loss)
         mode_losses.append(modes_loss)

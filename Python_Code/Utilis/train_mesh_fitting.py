@@ -19,7 +19,7 @@ from Python_Code.Utilis.fit_mesh_utils import (
 )
 
 import matplotlib.pyplot as plt 
-
+            
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -144,8 +144,6 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
         # Evaluation and logging (no gradient computation needed)
         with torch.no_grad():
             # Update mesh rendering periodically
-            steps_between_progress_update = 1
-            steps_between_fig_saves = 1 
             if i % steps_between_fig_saves == 0:
                 mesh_render, mean_arr_batch, origin = update_mesh_rendering_and_training_state(
                     dicom_exam, se, eli, warp_and_slice_model, learned_inputs, 

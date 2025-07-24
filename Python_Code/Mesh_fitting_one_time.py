@@ -5,11 +5,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 import torch.optim as optim
-import imageio
-import meshio
-import csv
-from copy import deepcopy
-from scipy.spatial.transform import Rotation
+import pandas as pd
 
 import matplotlib.pyplot as plt
 
@@ -133,7 +129,6 @@ def fit_mesh(dicom_exam,
     # Align initial mesh with DICOM coordinate system
     ut.set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se)
 
-    end_dices = []
     opt_method = optim.Adam
 
     # Run fitting for each repetition
@@ -181,18 +176,21 @@ def fit_mesh(dicom_exam,
 
         # Save outputs and Dice score
         with torch.no_grad():
-            end_dice = ut.save_results_post_training(
-                dicom_exam, outputs, eli, se, sz, use_bp_channel,
-                -mesh_origin, learned_inputs, tensor_labels)
-            end_dices.append(end_dice)
+            myo_end_dice, bp_end_dice = ut.save_results_post_training(
+                dicom_exam, outputs, eli,se, sz, use_bp_channel, 
+                              -mesh_origin, learned_inputs, tensor_labels)
+            
+            # Create a DataFrame
+            df_end_dice = pd.DataFrame({'Myocardium Dice': myo_end_dice, 'Blood pool dice': bp_end_dice})
+            fname = os.path.join(dicom_exam.folder['base'], 'end_dice.csv')
+            # Save to CSV
+            df_end_dice.to_csv(fname, index=False)
+
 
     # Final processing: mask generation for fitted meshes
     prepMeshMasks(dicom_exam)
 
-    fname = os.path.join(dicom_exam.folder['base'], 'end_dice.csv')
-    np.savetxt(fname, end_dices, delimiter=",", fmt="%.4f")
-
-    return end_dices
+    return df_end_dice
 
 
 

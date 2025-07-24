@@ -368,7 +368,7 @@ class LearnableInputPPModel(torch.nn.Module):
         predicted_cps = []
         predicted_slices = []
 
-        for time_step in self.dicom_exam.time_frames_to_fit:
+        for time_step in range(len(self.dicom_exam.time_frames_to_fit)):
             #extract shifts for this specific time step
             x_shift = x_shifts[:, :, :,time_step]
             y_shift = y_shifts[:, :, :,time_step]

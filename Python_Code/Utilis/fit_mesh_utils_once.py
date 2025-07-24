@@ -13,6 +13,7 @@ Dependencies: PyVista, PyTorch, SciPy, NumPy, MeshIO
 
 import os
 import sys
+from copy import deepcopy
 import csv
 import numpy as np
 import pyvista as pv
@@ -247,21 +248,21 @@ class evalLearnedInputs():
         meshes = []
         rescaled_modes = []
 
-        for time_step in self.dicom_exam.time_frames_to_fit:
+        for time_step in range(len(self.dicom_exam.time_frames_to_fit)):
 
             # Convert normalized modes to actual PCA coefficients
             normed_modes = np.concatenate([modes_output[0,:,time_step]])
+            
             rescaled_mode = (normed_modes * (self.mode_bounds[:, 1] - self.mode_bounds[:, 0]) / 2 + 
                             self.mode_means)
             
             # Generate 3D points from PCA coefficients
             gt_cp = ampsToPoints(rescaled_mode, self.PHI)
             #set 3D points to node positions of template mesh
-            self.mesh.points = gt_cp
-
-            meshes.append(self.mesh)
+            mesh_copy = deepcopy(self.mesh)
+            mesh_copy.points = gt_cp
+            meshes.append(mesh_copy)
             rescaled_modes.append(rescaled_mode)
-            
 
         return meshes
 
@@ -534,7 +535,7 @@ def get_time_frames_to_fit(dicom_exam, time_frames_to_fit, burn_in_length, num_c
         return time_frames_to_fit
 
 
-def save_results_post_training(dicom_exam, outputs, time_frame, eli, se, sz, use_bp_channel, 
+def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel, 
                               mesh_offset, learned_inputs, tensor_labels, save_mesh=True):
     """
     Save mesh fitting results after training completion.
@@ -556,39 +557,40 @@ def save_results_post_training(dicom_exam, outputs, time_frame, eli, se, sz, use
         float: Final Dice coefficient
     """
     # Generate final mesh and rendered results
-    ones_input = torch.Tensor(np.ones((1, 1))).to(device)
-    msh, modes, rescale_modes = eli(just_mesh=False)
-    mesh_render = getSlices(se, msh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input)
+    msh = eli()
+
+    d0_values = []
+    d1_values = []
+
+    for index, time_step in enumerate(dicom_exam.time_frames_to_fit):
     
-    d0 = dice_loss(outputs[:,:1], tensor_labels[:,:1])  # Myocardium
-    d1 = dice_loss(outputs[:,1:], tensor_labels[:,1:])  # Blood pool
+        d0 = dice_loss(outputs[index][:,:1], tensor_labels[:,:1,:,:,:,time_step])  # Myocardium
+        d1 = dice_loss(outputs[index][:,1:], tensor_labels[:,1:,:,:,:,time_step])  # Blood pool
 
-    # Store results in DICOM exam object
-    dicom_exam.fitted_meshes[time_frame] = {}
-    dicom_exam.fitted_meshes[time_frame].setdefault('rendered_and_sliced', []).append(
-        np.transpose(mesh_render.cpu().numpy()[0], (3, 1, 2, 0)))
+        d0_values.append(d0.item())
+        d1_values.append(d1.item())
 
-    if save_mesh:
-        # Create output directory
-        output_folder = dicom_exam.folder['meshes']
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
+        # Store rendered and sliced mesh in DICOM exam object for visulization
+        ones_input = torch.Tensor(np.ones((1, 1))).to(device)
+        mesh_render = getSlices(se, msh[index], sz, use_bp_channel, mesh_offset, learned_inputs, ones_input, index)
+        dicom_exam.fitted_meshes[time_step] = {}
+        dicom_exam.fitted_meshes[time_step].setdefault('rendered_and_sliced', []).append(
+            np.transpose(mesh_render.cpu().numpy()[0], (3, 1, 2, 0)))
 
-        # Save mesh as VTK file
-        mesh_filename = os.path.join(output_folder, "mesh_t=%d.vtk" % time_frame)
-        meshio.write(mesh_filename, msh)
-        
-        # Save PCA mode coefficients as CSV
-        csv_filename = os.path.join(output_folder, "mesh_t=%d.csv" % time_frame)
-        with open(csv_filename, 'w', newline='') as file:
-            writer = csv.writer(file)
-            for coefficient in rescale_modes:
-                writer.writerow([coefficient])
+        if save_mesh:
+            # Create output directory
+            output_folder = dicom_exam.folder['meshes']
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+
+            # Save mesh as VTK file
+            mesh_filename = os.path.join(output_folder, "mesh_t=%d.vtk" % time_step) #these two meshes are exactly the same 
+            meshio.write(mesh_filename, msh[index])
     
-    return d0.item() ,d1.item()
+    return d0_values ,d1_values
 
 
-def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input, time_step):
+def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input, index):
     """
     Extract 2D slices from 3D mesh using the slice extraction model.
     
@@ -606,13 +608,13 @@ def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_in
     """
     # Get transformation parameters from network
     modes_output, global_offsets, x_shifts, y_shifts, global_rotations = learned_inputs(ones_input)
-    per_slice_offsets = torch.cat([y_shifts[:, :, :,time_step] * 0, y_shifts[:, :, :,time_step], x_shifts[:, :, :,time_step]], dim=-1)
+    per_slice_offsets = torch.cat([y_shifts[:, :, :,index] * 0, y_shifts[:, :, :,index], x_shifts[:, :, :,index]], dim=-1)
 
     # Use the dedicated function for voxelization
     mean_arr_batch, origin = prepare_voxelized_mean_array(mesh, sz, use_bp_channel, device)
 
     # Extract slices using the slice extraction model
-    result = se([mean_arr_batch, global_offsets[:,:,:,time_step], per_slice_offsets, global_rotations[:,:,:,time_step]])
+    result = se([mean_arr_batch, global_offsets[:,:,:,index], per_slice_offsets, global_rotations[:,:,:,index]])
 
     return result
 

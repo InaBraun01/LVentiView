@@ -123,8 +123,10 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
         dice_loss, modes_loss, global_shift_loss, rotation_loss, slice_shift_loss = meshFittingLoss(
             outputs, modes_out, global_shifts_out, slice_shifts_out, rot_out, tensor_labels,
             mode_loss_weight, global_shift_penalty_weigth, slice_shift_penalty_weigth,
-            rotation_penalty_weigth, myo_weight, current_bp_weight, slice_weights=1
+            rotation_penalty_weigth, myo_weight, current_bp_weight, dicom_exam, slice_weights=1
         )
+
+
 
         # Total loss
         loss = 5*sum(dice_loss) + sum(modes_loss) + sum(global_shift_loss) + sum(rotation_loss) + sum(slice_shift_loss)
@@ -149,18 +151,13 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
         # Evaluation and logging (no gradient computation needed)
         with torch.no_grad():
             # Update mesh rendering periodically
-            steps_between_fig_saves = 1
-            steps_between_progress_update = 1
-            
             if i % steps_between_fig_saves == 0:
-                    print("Update mesh")
                     mean_arr_batch = update_mesh_rendering_and_training_state(
                     dicom_exam, se, eli, warp_and_slice_model, learned_inputs, 
                     pcaD, mesh_offset)
                 
             # Print progress and calculate metrics periodically
             if i % steps_between_progress_update == 0:
-                print("traing progress")
                 d0,d1 = print_training_progress(
                     i, train_steps, losses, outputs, tensor_labels,dicom_exam ,show_progress
                 )
@@ -259,14 +256,13 @@ def update_mesh_rendering_and_training_state(dicom_exam, se, eli, warp_and_slice
         torch.Tensor: Rendered mesh slices
     """
     # Generate new mesh
-    print("Here")
     msh = eli()
     sz = dicom_exam.sz
     ones_input = torch.Tensor(np.ones((1, 1))).to(device)
 
     mean_bp_arrays = []
     predicted_cps = []
-    for time_step in dicom_exam.time_frames_to_fit:
+    for time_step in range(len(dicom_exam.time_frames_to_fit)):
 
         # Update the starting mesh with current predictions
         update_starting_mesh = True
@@ -309,10 +305,10 @@ def print_training_progress(i, train_steps, losses, outputs, tensor_labels,dicom
     d0_values = []
     d1_values = []
 
-    for time_step in dicom_exam.time_frames_to_fit:
+    for index,time_step in enumerate(dicom_exam.time_frames_to_fit):
 
-        d0 = dice_loss(outputs[time_step][:,:1], tensor_labels[:,:1,:,:,:,time_step])  # Myocardium
-        d1 = dice_loss(outputs[time_step][:,1:], tensor_labels[:,1:,:,:,:,time_step])  # Blood pool
+        d0 = dice_loss(outputs[index][:,:1], tensor_labels[:,:1,:,:,:,time_step])  # Myocardium
+        d1 = dice_loss(outputs[index][:,1:], tensor_labels[:,1:,:,:,:,time_step])  # Blood pool
 
         d0_values.append(d0.item())
         d1_values.append(d1.item())
@@ -321,7 +317,9 @@ def print_training_progress(i, train_steps, losses, outputs, tensor_labels,dicom
     
     if show_progress:
         # Print main progress metrics
-        print(f"{i}/{train_steps}: loss = {latest_loss:.3f}, Myo dice = {np.mean(np.array(d0_values)):.3f}, Blood pool dice = {np.mean(np.array(d1_values)):.3f}")
+        print(f"{i}/{train_steps}: loss = {latest_loss:.3f}")
+        print(f"ED state:  Myo dice = {d0_values[0]:.3f}, Blood pool dice = {d1_values[0]:.3f}")
+        print(f"ES state:  Myo dice = {d0_values[1]:.3f}, Blood pool dice = {d1_values[1]:.3f}")
         
         # Print detailed loss breakdown
         print(f"loss breakdown: 1-dice = {losses[1].item():.3f}, modes = {losses[2].item():.3f}, "
