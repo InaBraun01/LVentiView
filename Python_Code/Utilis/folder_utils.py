@@ -28,6 +28,7 @@ def generate_exam_folders(output_folder, id_string):
         'initial_segs': ['images', 'initial_nn_seg_images'],
         'mesh_seg_uncertainty': ['mesh_seg_uncertainty'],
         'mesh_vol_plots': ['mesh_analysis_data', 'plots'],
+        'mesh_thickness': ['mesh_analysis_data', 'thickness'],
         'meshes_output': ['mesh_analysis_data'],
         'seg_masks': ['seg_masks']
     }

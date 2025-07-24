@@ -18,11 +18,22 @@ matplotlib.use('Agg')  # Non-GUI backend suitable for script and threads
 import matplotlib.pyplot as plt
 import seaborn as sns
 import imageio
+import pyvista as pv
 from scipy.ndimage.measurements import center_of_mass
 from skimage.morphology import skeletonize
 from matplotlib.colors import LinearSegmentedColormap
 
 from Python_Code.Utilis.volume_cal_functions import cal_bp_volume
+from Python_Code.Utilis.thickness_functions import (
+    seg_mask_plot_thickness_map,
+    translate_mesh_to_origin,
+    cartesian_to_cylindrical,
+    find_ring_slices,
+    plot_ring_slices,
+    compute_thickness_map,
+    meshes_plot_thickness_map
+)
+
 
 
 def compute_cardiac_parameters(dicom_exam, mask_type: str = 'seg') -> None:
@@ -334,7 +345,7 @@ def plot_time_series(data: pd.DataFrame, y_value: str, file_name: str,
         os.path.join(output_folder, f'{file_name}.svg'), 
         format='svg'
     )
-    plt.close()
+    plt.close(fig)
 
 
 def estimate_thickness_and_radius(myo_mask: np.ndarray) -> Tuple[float, float]:
@@ -613,11 +624,9 @@ def plot_uncertainty(uncertainty_avg: np.ndarray, dicom_exam,
 
     plt.tight_layout()
     plt.savefig(filename, dpi=300, bbox_inches='tight')
-    plt.close()
+    plt.close(fig)
 
-
-
-def compute_thickness_map(dicom_exam, n_theta_bins=36, label_of_interest=2):
+def seg_masks_compute_thickness_map(dicom_exam, n_theta_bins=36, label_of_interest=2):
 
     output_folder = dicom_exam.folder['seg_thickness']
 
@@ -693,61 +702,46 @@ def compute_thickness_map(dicom_exam, n_theta_bins=36, label_of_interest=2):
                 thickness = r_values.max() - r_values.min()
                 thickness_map[z, ti] = thickness   #10mm is the distance between slices in z direction
     
-        plot_thickness_map(thickness_map, time, output_folder)
+        seg_mask_plot_thickness_map(thickness_map, time, output_folder)
         np.save(os.path.join(output_folder, f"thickness_map_{time}"),thickness_map)
     return 
 
-def plot_thickness_map(thickness_map,time, output_folder):
-    """
-    Plot the radial thickness map with a custom colormap and legend for invalid points.
-    Assumes thickness_map is a 2D NumPy array with shape (n_slices, n_theta_bins).
-    """
 
-    # Create custom colormap (blue -> light grey -> red)
-    colors = ['#4B6FA5', '#D3D3D3', '#C10E21']
-    cmap = LinearSegmentedColormap.from_list('custom', colors, N=256)
+def meshes_compute_thickness_map(dicom_exam):
 
-    # Mask invalid data: NaNs or zero thickness (adjust condition if needed)
-    invalid_mask = np.isnan(thickness_map) | (thickness_map == 0)
-    masked_thickness = np.ma.masked_where(invalid_mask, thickness_map)
+    mesh_folder = dicom_exam.folder['meshes']
 
-    plt.figure(figsize=(12, 8))
+    output_folder = dicom_exam.folder['mesh_thickness']
 
-    # Plot masked thickness map
-    im = plt.imshow(masked_thickness, aspect='auto', cmap=cmap)
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
 
-    plt.xlabel("Azimuthal Angle ", fontsize=12, fontweight='bold')
-    plt.ylabel("Z height (mm)", fontsize=12, fontweight='bold')
+    for time_step in dicom_exam.time_frames_to_fit:
 
-    # Set x-ticks to degrees assuming bins cover 0 to 360°
-    n_theta_bins = thickness_map.shape[1]
-    tick_angles = np.linspace(0, 360, n_theta_bins + 1)
-    tick_locs = np.linspace(-0.5, n_theta_bins - 0.5, n_theta_bins + 1)  # align ticks with bin edges
-    plt.xticks(tick_locs, [f"{int(angle)}°" for angle in tick_angles], rotation=45, fontsize=11)
-    
-    # Original y-ticks (indices)
-    yticks = plt.yticks()[0]  # get current y tick locations (positions)
+        mesh_filename = os.path.join(mesh_folder, "mesh_t=%d.vtk" % time_step) #these two meshes are exactly the same 
 
-    # Create new labels by scaling tick values by 10
-    new_labels = [f"{int(tick * 10)}" for tick in yticks[1:-1]]
+        mesh = pv.read(mesh_filename)
+        points = mesh.points
 
-    plt.yticks(yticks[1:-1], new_labels, fontsize=11)
+        # Translate mesh to origin based on basal points threshold
+        translate_mesh_to_origin(mesh, points, threshold=0)
 
-    # Colorbar
-    cbar = plt.colorbar(im, label="Radial Thickness (mm)", shrink=0.8)
-    cbar.ax.tick_params(labelsize=11)
-    cbar.set_label("Radial Thickness (mm)", fontsize=12, fontweight='bold')
+        # Convert points to cylindrical coordinates
+        r, theta, z = cartesian_to_cylindrical(points)
 
-    plt.title(f"Radial Thickness Map - Time Step {time}", fontsize=16, fontweight='bold', pad=20)
-    plt.gca().invert_yaxis()
+        # Find ring-shaped z slices
+        ring_slices, z_bins = find_ring_slices(points, n_z_bins=15)
 
-    # Add black border around plot
-    for spine in plt.gca().spines.values():
-        spine.set_edgecolor('black')
-        spine.set_linewidth(1.2)
+        # Plot the ring-shaped slices
+        plot_ring_slices(points, ring_slices)
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_folder, f"thickness_map_{time}.pdf"),dpi=300)
+        # Compute thickness map and filtered z coords
+        thickness_map, filtered_z_coords = compute_thickness_map(r, theta, z, ring_slices, z_bins)
+
+        # Plot the thickness map
+        meshes_plot_thickness_map(thickness_map, filtered_z_coords,time_step, output_folder)
+        np.save(os.path.join(output_folder, f"thickness_map_{time_step}"),thickness_map)
+        np.save(os.path.join(output_folder, f"filtered_z_coords_{time_step}"),filtered_z_coords)
 
 
 def extract_auto_seg_compare_manu_seg(dicom_exam):

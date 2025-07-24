@@ -256,7 +256,7 @@ def update_mesh_rendering_and_training_state(dicom_exam, se, eli, warp_and_slice
         torch.Tensor: Rendered mesh slices
     """
     # Generate new mesh
-    msh = eli()
+    msh, rescale_modes = eli()
     sz = dicom_exam.sz
     ones_input = torch.Tensor(np.ones((1, 1))).to(device)
 
@@ -317,9 +317,7 @@ def print_training_progress(i, train_steps, losses, outputs, tensor_labels,dicom
     
     if show_progress:
         # Print main progress metrics
-        print(f"{i}/{train_steps}: loss = {latest_loss:.3f}")
-        print(f"ED state:  Myo dice = {d0_values[0]:.3f}, Blood pool dice = {d1_values[0]:.3f}")
-        print(f"ES state:  Myo dice = {d0_values[1]:.3f}, Blood pool dice = {d1_values[1]:.3f}")
+        print(f"{i}/{train_steps}: loss = {latest_loss:.3f}, Myocardium dice = {np.mean(np.array(d0_values)):.3f}, Blood pool dice = {np.mean(np.array(d1_values)):.3f}")
         
         # Print detailed loss breakdown
         print(f"loss breakdown: 1-dice = {losses[1].item():.3f}, modes = {losses[2].item():.3f}, "

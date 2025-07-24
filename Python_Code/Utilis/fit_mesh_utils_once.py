@@ -264,7 +264,7 @@ class evalLearnedInputs():
             meshes.append(mesh_copy)
             rescaled_modes.append(rescaled_mode)
 
-        return meshes
+        return meshes, rescaled_modes
 
 
 def ampsToPoints(amps, PHI=None):
@@ -557,7 +557,7 @@ def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel,
         float: Final Dice coefficient
     """
     # Generate final mesh and rendered results
-    msh = eli()
+    msh, rescale_modes = eli()
 
     d0_values = []
     d1_values = []
@@ -586,6 +586,13 @@ def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel,
             # Save mesh as VTK file
             mesh_filename = os.path.join(output_folder, "mesh_t=%d.vtk" % time_step) #these two meshes are exactly the same 
             meshio.write(mesh_filename, msh[index])
+
+            # Save PCA mode coefficients as CSV
+            csv_filename = os.path.join(output_folder, "mesh_t=%d.csv" % time_step)
+            with open(csv_filename, 'w', newline='') as file:
+                writer = csv.writer(file)
+                for coefficient in rescale_modes[index]:
+                    writer.writerow([coefficient])
     
     return d0_values ,d1_values
 
