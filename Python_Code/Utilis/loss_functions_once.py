@@ -39,71 +39,34 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
             - rotation_loss: Regularization loss for rotations
             - slice_shift_loss: Regularization loss for slice translations
     """
-    
-    # Use Dice loss for segmentation masks
-    # print(bp_weight)
-    # # bp_weight = 1
-    # print(myo_weight)
-    # Calculate weighted Dice losses for different anatomical structures
-    d0 = one_minus_dice_loss(pred[:,:1], target[:,:1], slice_weights) * myo_weight  # Myocardium
-    d1 = one_minus_dice_loss(pred[:,1:], target[:,1:], slice_weights) * bp_weight   # Blood pool
 
+    dice_losses = []
+    mode_losses = []
+    global_shift_losses = []
+    rotation_losses = []
+    slice_shift_losses = []
 
-    # print(f"Myocardium: {d0}")
-    # print(f"Blood pool: {d1}")
-    # sys.exit()
+    for time_step in range(len(pred)):
 
-    # pred = pred[:,1:][0,0,:,:].cpu().detach().numpy()
-    # target = target[:,1:][0,0,:,:].cpu().detach().numpy()
+        d0 = one_minus_dice_loss(pred[time_step][:,:1], target[:,:1,:,:,:,time_step], slice_weights) * myo_weight  # Myocardium
+        d1 = one_minus_dice_loss(pred[time_step][:,1:], target[:,1:,:,:,:,time_step], slice_weights) * bp_weight   # Blood pool
+        
+        # Combine segmentation losses
+        d_loss = d0 + d1
+        
+        # Calculate regularization losses for shape model parameters
+        modes_loss = torch.mean(modes[:,:,time_step]**2) * modes_weigth
+        global_shift_loss = torch.mean(global_shifts[:,:,:,time_step]**2) * global_shifts_weight
+        slice_shift_loss = torch.mean(slice_shifts[time_step]**2) * slice_shifts_weight
+        rotation_loss = torch.mean(rots[:,:,:,time_step]**2) * rotations_weight
 
-    # print('Blood pool')
-    # print(pred.sum())
-    # print(target.sum())
-
-    # print('Myocardium')
-    # pred = pred[:,:1][0,0,:,:].cpu().detach().numpy()
-    # target = target[:,:1][0,0,:,:].cpu().detach().numpy()
-    # print(pred.sum())
-    # print(target.sum())
-
-    # sys.exit()
-    # rows = 8
-    # fig, axs = plt.subplots(rows,2)
-    # # Plot each mask
-    # for row in range(rows):
-
-    #         mask_pred = pred[:,:,row]
-    #         im = axs[row,0].imshow(mask_pred, cmap='viridis', interpolation='nearest')
-            
-    #         # Remove axis ticks for cleaner look
-    #         axs[row,0].set_xticks([])
-    #         axs[row,0].set_yticks([])
-    #         axs[0, 0].set_title("Pred")
-
-    #         mask_target = target[:,:,row]
-    #         im = axs[row,1].imshow(mask_target, cmap='viridis', interpolation='nearest')
-            
-    #         # Remove axis ticks for cleaner look
-    #         axs[row,1].set_xticks([])
-    #         axs[row,1].set_yticks([])
-    #         axs[0,1].set_title("Target")
-    
-    
-    # # Adjust layout and display
-    # plt.tight_layout()
-    # plt.savefig("test_2_new.png")
-    # sys.exit()
-    
-    # Combine segmentation losses
-    d_loss = d0 + d1
-    
-    # Calculate regularization losses for shape model parameters
-    modes_loss = torch.mean(modes**2) * modes_weigth
-    global_shift_loss = torch.mean(global_shifts**2) * global_shifts_weight
-    slice_shift_loss = torch.mean(slice_shifts**2) * slice_shifts_weight
-    rotation_loss = torch.mean(rots**2) * rotations_weight
-    
-    return d_loss, modes_loss, global_shift_loss, rotation_loss, slice_shift_loss
+        dice_losses.append(d_loss)
+        mode_losses.append(modes_loss)
+        global_shift_losses.append(global_shift_loss)
+        rotation_losses.append(rotation_loss)
+        slice_shift_losses.append(slice_shift_loss)
+        
+    return dice_losses, mode_losses, global_shift_losses, rotation_losses, slice_shift_losses
 
 
 def one_minus_dice_loss(pred, target, slice_weights=1):

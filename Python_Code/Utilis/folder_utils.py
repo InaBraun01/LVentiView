@@ -21,13 +21,15 @@ def generate_exam_folders(output_folder, id_string):
         'mesh_plots': ['seg_analysis_data', 'meshes', 'plots'],
         'seg_plots': ['seg_analysis_data', 'segmentation', 'plots'],
         'seg_output_seg': ['seg_analysis_data', 'segmentation'],
+        'seg_thickness': ['seg_analysis_data', 'segmentation', 'thickness'],
         'seg_output_mesh': ['seg_analysis_data', 'meshes'],
         'meshes': ['meshes'],
         'mesh_segs': ['images', 'mesh_seg_images'],
         'initial_segs': ['images', 'initial_nn_seg_images'],
         'mesh_seg_uncertainty': ['mesh_seg_uncertainty'],
         'mesh_vol_plots': ['mesh_analysis_data', 'plots'],
-        'meshes_output': ['mesh_analysis_data']
+        'meshes_output': ['mesh_analysis_data'],
+        'seg_masks': ['seg_masks']
     }
 
     return {

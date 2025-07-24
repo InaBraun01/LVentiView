@@ -145,6 +145,7 @@ def dataArrayFromDicomFolder(PathDicom):
 
     # flipped_image_positions =  image_positions[::-1] #flip list
 
+
     return data, ConstPixelSpacing, image_ids, dicom_dir_details, slice_locations, trigger_times, image_positions, is3D, multifile
 
 def dataArrayFromDicomSingleFile(PathDicom):
