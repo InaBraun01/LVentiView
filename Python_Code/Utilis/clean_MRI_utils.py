@@ -2,13 +2,15 @@ import sys
 import numpy as np
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage.measurements import center_of_mass
+from skimage import measure
+import matplotlib.pyplot as plt
 
 from Python_Code.Utilis.pytorch_segmentation_utils import (
     produce_segmentation_at_required_resolution, simple_shape_correction
 )
 from Python_Code.Utilis.visualizeDICOM import planeToXYZ
 
-def clean_slices_base(dicom_series, percentage = 0.3):
+def clean_slices_base(dicom_series, percentage = 0.5):
     """
     Remove z-slices that are above the valve plane based on valve plane detection.
     
@@ -36,6 +38,7 @@ def clean_slices_base(dicom_series, percentage = 0.3):
         dicom_series.slices: Updated slice count
         dicom_series.XYZs: Updated coordinate list
     """
+
     number_time_frames = dicom_series.slice_above_valveplane.shape[0]
     number_z_stacks = dicom_series.slice_above_valveplane.shape[1]
     
@@ -115,7 +118,7 @@ def estimateValvePlanePosition(dicom_exam):
     for series in dicom_exam:
         if series.view == 'SAX':
             # Initialize valve plane heuristic array
-            series.VP_heuristic2 = np.zeros((series.frames, series.slices))
+            VP_heuristic2 = np.zeros((series.frames, series.slices))
             
             # Analyze each time frame and z-slice
             for time_frame in range(series.frames):
@@ -133,14 +136,56 @@ def estimateValvePlanePosition(dicom_exam):
                     myocardium_coverage = ((np.sum(myocardium_mask * blood_pool_boundary) + 0.00001) / 
                                          (np.sum(blood_pool_boundary) + 0.00001))
                     
-                    series.VP_heuristic2[time_frame, z_slice] = myocardium_coverage
+                    VP_heuristic2[time_frame, z_slice] = myocardium_coverage
             
             # Convert to binary: slices with >98% myocardium coverage are considered below valve plane
             # Use 0.98 threshold rather than 1.0 to allow for occasional missing pixels
-            series.VP_heuristic2 = series.VP_heuristic2 > 0.98
+            VP_heuristic2 = VP_heuristic2 > 0.98
+
+            plt.imshow(VP_heuristic2.astype(int))
+            plt.savefig("Heuristic_2.png")
+            plt.colorbar()
+
+            #the second slice after the RV "splits" (when moving from the apex towards the base) is the top LV slice:
+            VP_heuristic1 = np.zeros((series.frames, series.slices))
+            c_array = np.zeros((series.frames, series.slices))
+
+            for t in range(series.frames):
+                for j in range(series.slices):
+                    c = len(np.unique(measure.label(series.prepped_seg[t,j]==1, background=0)))
+                    c_array[t,j] = c
+                    # if c !=2:
+                    #     VP_heuristic1 [t,j] = 1
+                        # if j > 2 and VP_heuristic1 [t,j-1] == 0 and VP_heuristic1[t,j-2] == 0:
+                        #     VP_heuristic1[t,j] = 0
+                        # elif j > 0	 and VP_heuristic1[t,j-1] == 1:
+                        #     VP_heuristic1[t,j-1] = 2
+
+            for j in range(series.slices):
+                if np.mean(c_array, axis=0)[j] >= 3:
+                    for t in range(series.frames):
+                        VP_heuristic1 [t,j] = 1
+
+            VP_heuristic = VP_heuristic1 == 0
+
+            plt.imshow(c_array)
+            plt.colorbar()
+            plt.savefig("c_array.png")
+
+            print(np.sum(VP_heuristic))
+            plt.imshow(VP_heuristic.astype(int))
+            plt.colorbar()
+            plt.savefig("Heuristic_1.png")
             
-            # Store binary result indicating slices above valve plane (inverted logic)
-            series.slice_above_valveplane = series.VP_heuristic2.astype(int)
+
+        series.VP_heuristic2 = np.logical_and(VP_heuristic2, VP_heuristic)
+
+        plt.imshow(series.VP_heuristic2.astype(int))
+        plt.savefig("Heuristic.png")
+        plt.colorbar()
+            
+        # Store binary result indicating slices above valve plane (inverted logic)
+        series.slice_above_valveplane = series.VP_heuristic2.astype(int)
 
 
 def clean_time_frames(dicom_series, slice_threshold = 2):

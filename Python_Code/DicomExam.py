@@ -159,7 +159,7 @@ class DicomExam:
         with open(fname, "wb") as file_to_save:
             pickle.dump(self, file_to_save)
 
-    def clean_data(self, percentage_base = 0.3,percentage_apex = 0.2 ,slice_threshold = 1):
+    def clean_data(self, percentage_base = 0.5,percentage_apex = 0.2 ,slice_threshold = 1):
         """
         Clean and preprocess all DICOM series data.
         
@@ -302,7 +302,7 @@ class DicomExam:
                 # Create overlay if requested
                 if overlay:
                     img1, img2 = img[:img.shape[0]//2], img[img.shape[0]//2:]
-                    img = np.clip(img1 + img2 * 0.3, 0, 255)
+                    img = np.clip(img1 + img2 * 0.7, 0, 255)
                     img = img.astype('uint8')
 
             # Save image

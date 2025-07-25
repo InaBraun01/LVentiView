@@ -64,6 +64,7 @@ def segment(dicom_exam):
         
         # Calculate optimal crop size based on myocardium segmentation
         crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y,margin_factor=2.5)
+        #crop_size = 256
         crop_sizes.append(crop_size)
 
         # Ensure crop region stays within image bounds
@@ -76,7 +77,6 @@ def segment(dicom_exam):
         center_x = np.clip(center_x - crop_size // 2, 0, max_offset)
         center_y = np.clip(center_y - crop_size // 2, 0, max_offset)
         series.c1, series.c2 = center_x, center_y
-
 
         # Generate 3D world coordinates for each pixel in each slice
         series.XYZs = []
