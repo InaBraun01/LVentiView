@@ -8,6 +8,7 @@ neural networks to predict mesh deformations and control points.
 
 import sys,os
 import csv
+import time
 import numpy as np
 import pandas as pd
 import torch
@@ -126,8 +127,6 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
             rotation_penalty_weigth, myo_weight, current_bp_weight, dicom_exam, slice_weights=1
         )
 
-
-
         # Total loss
         loss = 5*sum(dice_loss) + sum(modes_loss) + sum(global_shift_loss) + sum(rotation_loss) + sum(slice_shift_loss)
 
@@ -150,6 +149,7 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
 
         # Evaluation and logging (no gradient computation needed)
         with torch.no_grad():
+
             # Update mesh rendering periodically
             if i % steps_between_fig_saves == 0:
                     mean_arr_batch = update_mesh_rendering_and_training_state(
@@ -164,6 +164,7 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
 
                 df_myo_dice.loc[len(df_myo_dice)] = d0
                 df_bp_dice.loc[len(df_bp_dice)] = d1
+
 
         i += 1
 
@@ -193,7 +194,7 @@ def should_continue_training(i, df_myo_dice, df_bp_dice, train_steps, dicom_exam
         last_myo_dice = df_myo_dice.iloc[-1].mean()
         last_bp_dice = df_bp_dice.iloc[-1].mean()
     
-        if last_myo_dice >= 0.875:
+        if last_myo_dice >= 0.85:
             print("Dice Scores are high enough Early Stopping activated:")
             print(f'Myocardium dice: {last_myo_dice:.3e}, Blood pool dice: {last_bp_dice:.3e}')
             # Append current step to CSV
@@ -260,6 +261,11 @@ def update_mesh_rendering_and_training_state(dicom_exam, se, eli, warp_and_slice
     sz = dicom_exam.sz
     ones_input = torch.Tensor(np.ones((1, 1))).to(device)
 
+    # Get current mode predictions and convert to control points
+    ones_input = torch.Tensor(np.ones((1, 1))).to(device)
+    modes_output, _, _, _, _ = learned_inputs(ones_input)
+    modes_output_reshape = modes_output.view(1,learned_inputs.num_modes, learned_inputs.num_time_steps)
+
     mean_bp_arrays = []
     predicted_cps = []
     for time_step in range(len(dicom_exam.time_frames_to_fit)):
@@ -267,13 +273,13 @@ def update_mesh_rendering_and_training_state(dicom_exam, se, eli, warp_and_slice
         # Update the starting mesh with current predictions
         update_starting_mesh = True
         if update_starting_mesh:
+            start = time.time()
             mean_arr, mean_bp_arr, origin = voxelizeUniform(msh[time_step], sz, bp_channel=True)
+            end = time.time()
+            print(f"voxelizeUniform: {end - start :.3}s")
+
             mean_arr_batch = torch.Tensor(np.concatenate([mean_arr[None,None], mean_bp_arr[None,None]], axis=1)).to(device)
 
-            # Get current mode predictions and convert to control points
-            ones_input = torch.Tensor(np.ones((1, 1))).to(device)
-            modes_output, _, _, _, _ = learned_inputs(ones_input)
-            modes_output_reshape = modes_output.view(1,learned_inputs.num_modes, learned_inputs.num_time_steps)
             predicted_cp = pcaD(modes_output_reshape[:, :,time_step])
 
             mean_bp_arrays.append(mean_arr_batch)

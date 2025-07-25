@@ -14,7 +14,8 @@ from Python_Code.Utilis.analysis_utils import (
     calculate_segmentation_uncertainty,
     analyze_mesh_volumes,
     extract_auto_seg_compare_manu_seg,
-    compute_thickness_map
+    seg_masks_compute_thickness_map,
+    meshes_compute_thickness_map
 )
 from Python_Code.Segmentation import segment
 from Python_Code.Utilis.load_DicomExam import loadDicomExam
@@ -27,7 +28,7 @@ local_path    = os.getcwd()
 data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Patient_data/Healthy/'
 
 # data_dir = "/data.lfpn/ibraun/Code/paper_volume_calculation/Human_data"
-output_folder='test/test' 
+output_folder='test/test_all' 
 
 # output_folder = 'outputs_healthy_GUI'
 
@@ -87,8 +88,8 @@ for dataset_to_use in datasets:
         print("Running segmentation...")
         segment(de)
 
-        print("Saving Automatic Segmentation Masks to Available Manual Segmentation Masks...")
-        extract_auto_seg_compare_manu_seg(de)
+        # print("Saving Automatic Segmentation Masks to Available Manual Segmentation Masks...")
+        # extract_auto_seg_compare_manu_seg(de)
 
         print("Save Visualization of Segmentation Results ..")
         #Save a visualisation of the full MRI data with the generated segmentation masks
@@ -117,7 +118,7 @@ for dataset_to_use in datasets:
         compute_cardiac_parameters(de,'seg')
 
         print("Calculate Local Thickness...")
-        compute_thickness_map(de)
+        seg_masks_compute_thickness_map(de)
 
         print("Saving analysis object...")
         #Save object of type DicomExam as pickel file
@@ -128,8 +129,6 @@ for dataset_to_use in datasets:
         print("Loading Segmentation from (already segmented) DicomExam")
         de = loadDicomExam(input_path,output_folder)
 
-
-
     if stage == "all" or stage == "meshing":
 
         #Remove all meshes previously fitted to the segmentation masks
@@ -138,15 +137,18 @@ for dataset_to_use in datasets:
         start_time = time.time()
         print("Running Mesh Fitting...")
         #Fit 3D Volumetric meshes to the generated Segmentation masks
-        df_end_dice = fit_mesh(de,training_steps=10, time_frames_to_fit=[0], burn_in_length=0, train_mode='normal',
+        df_end_dice = fit_mesh(de,training_steps=1, time_frames_to_fit="all", burn_in_length=0, train_mode='normal',
 		mode_loss_weight = 7.405277111193427e-07, #how strongly to penalise large mode values
-		global_shift_penalty_weigth = 0.3, steps_between_progress_update=1,
+		global_shift_penalty_weigth = 0.3, steps_between_progress_update=100,
 		lr =  0.095, num_cycle = 1, num_modes = 25) #fits a mesh to every time frame. Check the function definition for a list of its arguments
         end_time = time.time()
 
         print(f"Myocardium Dice: {df_end_dice['Myocardium Dice'].mean():.3f}")
         print(f"Blood Pool Dice: {df_end_dice['Blood pool dice'].mean():.3f}")
         print(f"Fitting took: {end_time - start_time:.3f}s")
+
+        with open(de.folder['base'] +"/fitting_time.csv", "w") as f:
+            f.write(f"{end_time - start_time:.3f}\n")
 
         print("Save Visualization of Generated Meshes ..")
         #Save a visualisation of the sliced mesh overlying the cleaned MRI images
@@ -160,9 +162,12 @@ for dataset_to_use in datasets:
         #Analysis and Plots various cardiac parameters calculated directly from the volumetric mesh
         analyze_mesh_volumes(de) #need to implement plotting
 
-        print("Calculating Segmentation Uncertainty ...")
-        #Calculate uncertainty of generated mesh
-        calculate_segmentation_uncertainty(de,'mesh')
+        # print("Calculating Segmentation Uncertainty ...")
+        # #Calculate uncertainty of generated mesh
+        # calculate_segmentation_uncertainty(de,'mesh')
+
+        print("Calculate Local Thickness...")
+        meshes_compute_thickness_map(de)
 
         print("Saving Analysis Object...")
         #Save object of type DicomExam as pickel file

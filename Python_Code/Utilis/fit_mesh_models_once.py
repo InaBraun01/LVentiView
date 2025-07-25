@@ -1,5 +1,6 @@
 import sys
 import csv
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -361,35 +362,31 @@ class LearnableInputPPModel(torch.nn.Module):
         # Use the learnableInputs module to get all mesh and transformation parameters
         modes_output, volume_shift, x_shifts, y_shifts, global_rotations = self.learned_inputs(ones_input)
 
-        #reshape all outputs appropriately
-        modes_output_reshape = modes_output.view(1,self.num_modes,self.learned_inputs.num_time_steps)
+        modes_output_reshape = modes_output.view(1, self.num_modes, self.learned_inputs.num_time_steps)
+        T = self.learned_inputs.num_time_steps
 
-        slice_shifts = []
+        x_shift_all = x_shifts[0]  # shape: [num_slices, 1, T]
+        y_shift_all = y_shifts[0]
+        zero = torch.zeros_like(y_shift_all)
+        slice_shifts_all = torch.cat([x_shift_all, y_shift_all, zero], dim=1)  # [num_slices, 3, T]
+
         predicted_cps = []
+        slice_shifts = []
         predicted_slices = []
 
-        for time_step in range(len(self.dicom_exam.time_frames_to_fit)):
-            #extract shifts for this specific time step
-            x_shift = x_shifts[:, :, :,time_step]
-            y_shift = y_shifts[:, :, :,time_step]
-        
-            # Concatenate per-slice shift parameters to form a [N, num_slices, 3] offset tensor
-            # Here, the last dimension: [x_shift, y_shift, z_shift=0]
-            slice_shift = torch.cat([x_shift, y_shift, y_shift*0], dim=-1)
-
-            # Decode the low-dimensional modes into a full set of mesh control points
-            predicted_cp = self.pcaD(modes_output_reshape[:, :,time_step])
-                
-            # Apply the warping and slicing model to get predicted 2D slices
-            predicted_slice = self.warp_and_slice_model([
-                predicted_cp, voxelized_mean_mesh[time_step][:1], volume_shift[:,:,:,time_step], slice_shift, global_rotations[:,:,:,time_step],time_step]) 
-            
-            #save all calculated values in lists
-            slice_shifts.append(slice_shift)
-            predicted_cps.append(predicted_cp)
-            predicted_slices.append(predicted_slice)
-
-        
+        for t in range(T):
+            shift = slice_shifts_all[:, :, t].unsqueeze(0)
+            cp = self.pcaD(modes_output_reshape[:, :, t])
+            slice_ = self.warp_and_slice_model([
+                cp, voxelized_mean_mesh[t][:1],
+                volume_shift[:, :, :, t],
+                shift,
+                global_rotations[:, :, :, t],
+                t,
+            ])
+            predicted_cps.append(cp)
+            slice_shifts.append(shift)
+            predicted_slices.append(slice_)
         # Return all outputs for further loss computation, analysis, or optimization
         return predicted_slices, modes_output_reshape, volume_shift, global_rotations, predicted_cps, slice_shifts
 

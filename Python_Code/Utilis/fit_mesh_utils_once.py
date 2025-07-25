@@ -108,6 +108,43 @@ def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
     return (mesh_1, mesh_1.points[exterior_points_index], PHI3, PHI, mode_bounds, mean_modes, mesh_axes)
 
 
+
+def meshio_tetra_to_unstructured_grid(mesh):
+    """
+    Convert a meshio mesh with tetrahedral cells and associated data to a PyVista UnstructuredGrid.
+    """
+    if "tetra" not in mesh.cells_dict:
+        raise ValueError("Mesh must contain tetrahedral cells (type: 'tetra').")
+
+    points = np.array(mesh.points, dtype=np.float32)  # ensure float32 or float64
+
+    tets = np.array(mesh.cells_dict["tetra"], dtype=np.int64)
+    n_cells = tets.shape[0]
+
+    # Flatten the cell array and prepend with number of nodes per cell (always 4 for tets)
+    cells = np.hstack([np.full((n_cells, 1), 4), tets]).flatten()
+
+    celltypes = np.full(n_cells, pv.CellType.TETRA, dtype=np.uint8)
+
+    grid = pv.UnstructuredGrid(cells, celltypes, points)
+
+    # Optionally: add point data if available
+    if mesh.point_data:
+        for key, val in mesh.point_data.items():
+            grid.point_data[key] = val
+
+    if mesh.cell_data:
+        for key, val in mesh.cell_data.items():
+            # mesh.cell_data[key] could be a list if multiple cell types
+            if isinstance(val, list):
+                # Select the one for tetrahedra
+                tet_data = val[mesh.cells.index(("tetra", tets))]
+                grid.cell_data[key] = tet_data
+            else:
+                grid.cell_data[key] = val
+
+    return grid
+
 def voxelizeUniform(mesh, sz, gridsize=None, bp_channel=False):
     """
     Convert a 3D mesh to a voxelized representation on a uniform grid.
@@ -133,16 +170,7 @@ def voxelizeUniform(mesh, sz, gridsize=None, bp_channel=False):
 
     spacing = (gridsize / sz, gridsize / sz, gridsize / z_res)
 
-    # Create unique filename using time and a random int
-    timestamp = int(time.time() * 1e6)  # microseconds
-    randint = random.randint(0, 99999)
-    tmp_filename = f"tmp_{timestamp}_{randint}.vtk"
-
-    # Save mesh and read with PyVista
-    meshio.write(tmp_filename, mesh)
-    model = pv.read(tmp_filename)
-    # Delete temporary file
-    os.remove(tmp_filename)
+    model = meshio_tetra_to_unstructured_grid(mesh)
 
     # Determine origin based on mesh bounds
     bounds = np.array(model.bounds)
