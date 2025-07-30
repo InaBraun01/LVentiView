@@ -7,6 +7,8 @@ import csv
 import ast
 import time
 import cProfile
+import torch
+torch.cuda.empty_cache()
 
 from Python_Code.DicomExam import DicomExam
 from Python_Code.Utilis.analysis_utils import (
@@ -25,10 +27,10 @@ from Python_Code.Utilis.clean_MRI_utils import estimateValvePlanePosition , esti
 local_path    = os.getcwd()
 
 # data_dir = local_path + '/Data_healthy/'
-data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Patient_data/Healthy/'
+data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Patient_data/'
 
 # data_dir = "/data.lfpn/ibraun/Code/paper_volume_calculation/Human_data"
-output_folder='test/test_all' 
+output_folder='outputs_patient_data/full_result' 
 
 # output_folder = 'outputs_healthy_GUI'
 
@@ -38,19 +40,32 @@ output_folder='test/test_all'
 
 # datasets = ['Welle']
 
-# #heart failure infarct datasets
-# datasets = ['SCD0000101','SCD0000201','SCD0000301','SCD0000401','SCD0000501','SCD0000601', 'SCD0000701','SCD0000801','SCD0000901','SCD0001001','SCD0001101','SCD0001201']
+#Healthy datasets
+#datasets_healthy = ['SCD0003701','SCD0003801','SCD0003901','SCD0004001','SCD0004101','SCD0004201','SCD0004301','SCD0004401','SCD0004501']
+# datasets_healthy = ['SCD0004201','SCD0004301','SCD0004401','SCD0004501']
+# pathology_healthy = [ "Healthy/" for i in range(len(datasets_healthy))]
 
-# #heart failure without infarct datasets
-# datasets = ['SCD0001301','SCD0001401','SCD0001501','SCD0001601','SCD0001701','SCD0001801','SCD0001901','SCD0002001','SCD0002101','SCD0002201','SCD0002301','SCD0002401']
 
-# #Lv Hypertrophy datasets
-# datasets = ['SCD0002501','SCD0002601','SCD0002701','SCD0002801','SCD0002901','SCD0003001','SCD0003101','SCD0003201','SCD0003301','SCD0003401','SCD0003501','SCD0003601']
+#heart failure infarct datasets #'SCD0000201',#'SCD0000601' must be run again
+#'SCD0000801' is too large can not run on this GPU. I either need to run it on the mac or I need to run it on CPU. 
+# datasets_failure_infarct = ['SCD0000101','SCD0000201','SCD0000301','SCD0000401','SCD0000501','SCD0000601', 'SCD0000701','SCD0000801','SCD0000901','SCD0001001','SCD0001101','SCD0001201']
+datasets_failure_infarct = ['SCD0000901','SCD0001001','SCD0001101','SCD0001201']
 
-# #Healthy datasets
-# datasets = ['SCD0003701','SCD0003801','SCD0003901','SCD0004001','SCD0004101','SCD0004201','SCD0004301','SCD0004401','SCD0004501']
+pathology_failure_infarct = ['Heart_failure_infarct/' for i in range(len(datasets_failure_infarct))]
 
-datasets = ['SCD0003701']
+#heart failure without infarct datasets
+datasets_failure = ['SCD0001301','SCD0001401','SCD0001501','SCD0001601','SCD0001701','SCD0001801','SCD0001901','SCD0002001','SCD0002101','SCD0002201','SCD0002301','SCD0002401']
+pathology_failure = ['Heart_failure/' for i in range(len(datasets_failure))]
+
+#Lv Hypertrophy datasets
+datasets_Lv = ['SCD0002501','SCD0002601','SCD0002701','SCD0002801','SCD0002901','SCD0003001','SCD0003101','SCD0003201','SCD0003301','SCD0003401','SCD0003501','SCD0003601']
+pathology_Lv = ['LV_hypertrophy/' for i in range(len(datasets_Lv))]
+
+datasets =  datasets_failure_infarct + datasets_failure  + datasets_Lv
+pathology =  pathology_failure_infarct + pathology_failure + pathology_Lv
+
+# datasets = ['SCD0000801']
+# pathology = [ "Heart_failure_infarct/"]
 
 # datasets = ['Patient077']
 # Define valid stages
@@ -73,10 +88,13 @@ else:
     stage = "all"
     print("Running Segmentation and Mesh Fitting...")
 
-for dataset_to_use in datasets: 
+for index,dataset_to_use in enumerate(datasets): 
 
     print(f"Processing Data from: {dataset_to_use}")
-    input_path = os.path.join(data_dir, dataset_to_use)
+    # input_path = os.path.join(data_dir, dataset_to_use)
+
+    input_folder = os.path.join(data_dir,pathology[index])
+    input_path = os.path.join(input_folder, dataset_to_use)
 
     if stage == "all" or stage == "segmentation":
         print("Loading DICOM data...")
@@ -88,8 +106,8 @@ for dataset_to_use in datasets:
         print("Running segmentation...")
         segment(de)
 
-        # print("Saving Automatic Segmentation Masks to Available Manual Segmentation Masks...")
-        # extract_auto_seg_compare_manu_seg(de)
+        print("Saving Automatic Segmentation Masks to Available Manual Segmentation Masks...")
+        extract_auto_seg_compare_manu_seg(de)
 
         print("Save Visualization of Segmentation Results ..")
         #Save a visualisation of the full MRI data with the generated segmentation masks
@@ -99,9 +117,13 @@ for dataset_to_use in datasets:
         #Estimate the planes lying above the LV base
         estimateValvePlanePosition(de)
 
-        # print("Cleaning data...")
-        # #Clean MRI data based on Segmentations
-        # de.clean_data()
+        print("Estimating landmarks...")
+        #Calculate landmarks
+        de.estimate_landmarks()
+
+        print("Cleaning data...")
+        #Clean MRI data based on Segmentations
+        de.clean_data()
 
         print("Estimate MRI orientation...")
         estimate_MRI_orientation(de)
@@ -109,10 +131,6 @@ for dataset_to_use in datasets:
         print("Save Cleaned Visualization of Segmentation Results ..")
         #Save a visualisation of the cleaned MRI data with the generated segmentation masks
         de.save_images(prefix='cleaned')
-
-        print("Estimating landmarks...")
-        #Calculate landmarks
-        de.estimate_landmarks()
     
         print("Analyse segmentation masks...")
         compute_cardiac_parameters(de,'seg')
@@ -137,12 +155,27 @@ for dataset_to_use in datasets:
         start_time = time.time()
         print("Running Mesh Fitting...")
         #Fit 3D Volumetric meshes to the generated Segmentation masks
-        df_end_dice = fit_mesh(de,training_steps=1, time_frames_to_fit="all", burn_in_length=0, train_mode='normal',
-		mode_loss_weight = 7.405277111193427e-07, #how strongly to penalise large mode values
-		global_shift_penalty_weigth = 0.3, steps_between_progress_update=100,
-		lr =  0.095, num_cycle = 1, num_modes = 25) #fits a mesh to every time frame. Check the function definition for a list of its arguments
-        end_time = time.time()
+        try:
+            # Replace this with your actual function call
+            df_end_dice = fit_mesh(
+                de,
+                training_steps=5000,
+                time_frames_to_fit="all",
+                burn_in_length=0,
+                train_mode='normal',
+                mode_loss_weight=7.405277111193427e-07,
+                global_shift_penalty_weigth=0.3,
+                steps_between_progress_update=100,
+                lr=0.095,
+                num_cycle=1,
+                num_modes=25
+            )
+            end_time = time.time()
+        except Exception as e:
+            print(f"Error in Dataset {dataset_to_use}: {e}")
 
+
+            # The loop continues with the next i automatically
         print(f"Myocardium Dice: {df_end_dice['Myocardium Dice'].mean():.3f}")
         print(f"Blood Pool Dice: {df_end_dice['Blood pool dice'].mean():.3f}")
         print(f"Fitting took: {end_time - start_time:.3f}s")

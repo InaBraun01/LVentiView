@@ -273,10 +273,7 @@ def update_mesh_rendering_and_training_state(dicom_exam, se, eli, warp_and_slice
         # Update the starting mesh with current predictions
         update_starting_mesh = True
         if update_starting_mesh:
-            start = time.time()
             mean_arr, mean_bp_arr, origin = voxelizeUniform(msh[time_step], sz, bp_channel=True)
-            end = time.time()
-            print(f"voxelizeUniform: {end - start :.3}s")
 
             mean_arr_batch = torch.Tensor(np.concatenate([mean_arr[None,None], mean_bp_arr[None,None]], axis=1)).to(device)
 

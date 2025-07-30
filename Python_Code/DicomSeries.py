@@ -70,6 +70,7 @@ class DicomSeries(object):
         self.image_positions = image_positions
         self.is3D = is3D
         self.multifile = multifile
+        self.VP_heuristic1 = None
         
         # Initialize processing variables
         self.prepped_data = self.data  # Will be modified during preprocessing

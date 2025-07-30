@@ -2,6 +2,7 @@ import sys
 import numpy as np
 from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage.measurements import center_of_mass
+from scipy.stats import linregress
 from skimage import measure
 import matplotlib.pyplot as plt
 
@@ -10,7 +11,7 @@ from Python_Code.Utilis.pytorch_segmentation_utils import (
 )
 from Python_Code.Utilis.visualizeDICOM import planeToXYZ
 
-def clean_slices_base(dicom_series, percentage = 0.5):
+def clean_slices_base(dicom_series, apex_slices, percentage = 0.5):
     """
     Remove z-slices that are above the valve plane based on valve plane detection.
     
@@ -38,6 +39,8 @@ def clean_slices_base(dicom_series, percentage = 0.5):
         dicom_series.slices: Updated slice count
         dicom_series.XYZs: Updated coordinate list
     """
+
+    percentage = 0.7
 
     number_time_frames = dicom_series.slice_above_valveplane.shape[0]
     number_z_stacks = dicom_series.slice_above_valveplane.shape[1]
@@ -69,6 +72,23 @@ def clean_slices_base(dicom_series, percentage = 0.5):
     elif (number_z_stacks - 2 in z_height_remove and 
           number_z_stacks - 1 not in z_height_remove):
         z_height_remove.append(number_z_stacks - 1)
+
+
+    # Example threshold for closeness in integer space
+    threshold = 1  # you can set to 0 if you want only exact matches
+
+    # Use set for fast membership checking
+    apex_set = set(apex_slices)
+
+    # Remove values from z_height_remove that are close to any value in apex_slices
+    z_height_remove = [
+        z - len(apex_set) for z in z_height_remove
+        if all(abs(z - a) > threshold for a in apex_set)
+    ]
+
+    print("Base")  #Base [2,8.9]
+    print(z_height_remove)
+
     
     # Remove identified slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, z_height_remove, axis=1)
@@ -142,9 +162,7 @@ def estimateValvePlanePosition(dicom_exam):
             # Use 0.98 threshold rather than 1.0 to allow for occasional missing pixels
             VP_heuristic2 = VP_heuristic2 > 0.98
 
-            plt.imshow(VP_heuristic2.astype(int))
-            plt.savefig("Heuristic_2.png")
-            plt.colorbar()
+            series.VP_heuristic1 = VP_heuristic2
 
             #the second slice after the RV "splits" (when moving from the apex towards the base) is the top LV slice:
             VP_heuristic1 = np.zeros((series.frames, series.slices))
@@ -154,36 +172,41 @@ def estimateValvePlanePosition(dicom_exam):
                 for j in range(series.slices):
                     c = len(np.unique(measure.label(series.prepped_seg[t,j]==1, background=0)))
                     c_array[t,j] = c
-                    # if c !=2:
-                    #     VP_heuristic1 [t,j] = 1
-                        # if j > 2 and VP_heuristic1 [t,j-1] == 0 and VP_heuristic1[t,j-2] == 0:
-                        #     VP_heuristic1[t,j] = 0
-                        # elif j > 0	 and VP_heuristic1[t,j-1] == 1:
-                        #     VP_heuristic1[t,j-1] = 2
+            
+            mean_per_slice = np.mean(c_array, axis=0)
 
-            for j in range(series.slices):
-                if np.mean(c_array, axis=0)[j] >= 3:
-                    for t in range(series.frames):
-                        VP_heuristic1 [t,j] = 1
+            # Fit a line: x = slice indices, y = mean values
+            x = np.arange(len(mean_per_slice))
+            slope, intercept, _, _, _ = linregress(x, mean_per_slice)
+
+            # Decide trend
+            if slope > 0:
+                trend = "ascending"
+            else:
+                trend = "descending"
+
+            # Find indices where mean >= 3
+            eligible_indices = np.where(mean_per_slice >= 3)[0]
+
+            # Remove the first or last eligible index based on trend
+            if len(eligible_indices) > 0:
+                if trend == "ascending":
+                    eligible_indices = eligible_indices[1:]  # Skip first
+                else:
+                    eligible_indices = eligible_indices[:-1]  # Skip last
+
+            # Initialize heuristic mask
+            VP_heuristic1 = np.zeros_like(c_array, dtype=np.uint8)
+
+            # Apply mask
+            for j in eligible_indices:
+                for t in range(series.frames):
+                    VP_heuristic1[t, j] = 1
 
             VP_heuristic = VP_heuristic1 == 0
 
-            plt.imshow(c_array)
-            plt.colorbar()
-            plt.savefig("c_array.png")
-
-            print(np.sum(VP_heuristic))
-            plt.imshow(VP_heuristic.astype(int))
-            plt.colorbar()
-            plt.savefig("Heuristic_1.png")
-            
-
         series.VP_heuristic2 = np.logical_and(VP_heuristic2, VP_heuristic)
 
-        plt.imshow(series.VP_heuristic2.astype(int))
-        plt.savefig("Heuristic.png")
-        plt.colorbar()
-            
         # Store binary result indicating slices above valve plane (inverted logic)
         series.slice_above_valveplane = series.VP_heuristic2.astype(int)
 
@@ -231,6 +254,8 @@ def clean_time_frames(dicom_series, slice_threshold = 2):
                 incomplete_frames.append(time_frame)
                 break
     
+    print("Time")
+    print(incomplete_frames)
     # Remove incomplete time frames from both segmentation and image data
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, incomplete_frames, axis=0)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, incomplete_frames, axis=0)
@@ -305,6 +330,13 @@ def clean_slices_apex(dicom_series, percentage = 0.2):
                 slices_to_remove.append(z_slice)
                 break
 
+
+    if 1 in slices_to_remove:
+        slices_to_remove.append(0)
+
+    if dicom_series.slices - 2 in slices_to_remove:
+        slices_to_remove.append(dicom_series.slices - 1)
+
     # Remove problematic slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, slices_to_remove, axis=1)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, slices_to_remove, axis=1)
@@ -360,7 +392,7 @@ def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
         # Generate 3D world coordinates for each slice in the series
         series.XYZs = []
         for slice_idx in range(series.slices):
-            height, width = series.cleaned_data.shape[-2:]  # Dynamic dimensions
+            height, width = segmentation_mask.shape[-2:]  # Dynamic dimensions
 
             X, Y, Z = planeToXYZ(
                 (height, width),
@@ -369,10 +401,12 @@ def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
                 [1, 1]  # Assuming isotropic in-plane resolution; adjust if needed
             )
 
+
             # Crop the coordinate grids
             X_cropped = X[center_y:center_y + crop_size, center_x:center_x + crop_size]
             Y_cropped = Y[center_y:center_y + crop_size, center_x:center_x + crop_size]
             Z_cropped = Z[center_y:center_y + crop_size, center_x:center_x + crop_size]
+
 
             # Stack cropped coordinates and flatten to (N, 3)
             xyz_coords = np.stack([X_cropped.ravel(), Y_cropped.ravel(), Z_cropped.ravel()], axis=1)
@@ -381,6 +415,12 @@ def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
         # Define slices for cropping
         crop_slice_x = slice(center_x, center_x + crop_size)
         crop_slice_y = slice(center_y, center_y + crop_size)
+
+        # For segmentation masks (before transpose)
+        cropped_mask = segmentation_mask[:, :, center_x:center_x + crop_size, center_y:center_y + crop_size]  # (x, y) order
+
+        # After transpose
+        series.prepped_seg = np.transpose(cropped_mask, (0, 1, 3, 2))
 
         # Crop and transpose data to shape (time, slice, y, x)
         series.prepped_seg = np.transpose(
@@ -391,6 +431,7 @@ def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
             segmented_data[:, :, crop_slice_x, crop_slice_y], 
             (0, 1, 3, 2)
         )
+
 
         # Optional shape correction for short-axis view
         if is_sax:

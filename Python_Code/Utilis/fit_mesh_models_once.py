@@ -217,7 +217,6 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         self.grid = 2 * (self.grid / (self.vol_shape)) - 1
 
         self.grid = torch.Tensor(self.grid).to(device)
-
         # Create an orientation (local coordinate system) for each slice
         self.coordinate_system = torch.Tensor(makeSliceCoordinateSystems(dicom_exam)).to(device)
 
@@ -284,8 +283,11 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
 
             # Flatten back to shape [1, N, 3] for interpolation
             batched_grid = batched_grid.view(1, -1, 3)
+        
+        a = warped_control_points.flip(-1) * 2 - 1
+        b = batched_control_points.flip(-1) * 2 - 1
 
-
+        # sys.exit()
         # --- Spline Interpolation ---
         #Interpolates how each point in batched_grid is defomed based on control points using B-spline
         #for warp points I know deformed position as well as undeformed position

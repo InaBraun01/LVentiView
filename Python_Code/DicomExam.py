@@ -180,14 +180,14 @@ class DicomExam:
         """
         for series in self:
 
-            # Remove planes above base
-            clean_slices_base(series,percentage_base)
+            incomplete_frames = clean_time_frames(series, slice_threshold)
 
             # Remove slices below apex
-            clean_slices_apex(series, percentage_apex)
-            
-            # Remove time frames with more than 2 missing z slices
-            incomplete_frames = clean_time_frames(series, slice_threshold)
+            apex_slices = clean_slices_apex(series, percentage_apex)
+
+            # Remove planes above base
+            clean_slices_base(series,apex_slices,percentage_base)
+
 
         # Update time frame count after cleaning
         self.time_frames = self.time_frames - len(incomplete_frames)
@@ -338,26 +338,41 @@ class DicomExam:
                 continue
 
             # Identify slices with C-shape that are within LV
-            slices_to_use = ((1 - series.VP_heuristic2) * 
+            slices_to_use = ((1 - series.VP_heuristic1) * 
                            (1 - series.slice_above_valveplane))
+            
+            print(slices_to_use)
 
             for t in range(self.time_frames):
                 for j in range(series.slices):
-                    if slices_to_use[t, j] and series.distance_from_center[j] > 0:
-                        # Extract myocardium and blood pool masks
-                        myo = series.prepped_seg[t, j] == 2
-                        bp = series.prepped_seg[t, j] == 3
+                    # if slices_to_use[t, j] and series.distance_from_center[j] > 0:
+                    # # Extract myocardium and blood pool masks
+                    # myo = series.prepped_seg[t, j] == 2
+                    # bp = series.prepped_seg[t, j] == 3
 
-                        # Create approximate aortic valve mask
-                        approx_valve_mask = (binary_dilation(bp) * 
-                                           (1 - bp) * (1 - myo))
+                    # # Create approximate aortic valve mask
+                    # approx_valve_mask = (binary_dilation(bp) * 
+                    #                    (1 - bp) * (1 - myo))
 
-                        # Get XYZ coordinates for aortic valve 
-                        xyz = series.XYZs[j].reshape((self.sz, self.sz, 3))
-                        valve_coords = xyz[approx_valve_mask == 1]
-                        
-                        if len(valve_coords) > 0:
-                            valve_xyzs.append(np.mean(valve_coords, axis=0))
+                    myo = series.prepped_seg[t, j] == 2
+                    bp = series.prepped_seg[t, j] == 3
+
+                    # Step 1: Dilate the blood pool
+                    dilated_bp = binary_dilation(bp)
+
+                    # Step 2: Exclude original bp and myocardium from dilated region
+                    approx_valve_mask = dilated_bp & ~bp & ~myo
+                    approx_valve_mask = approx_valve_mask.astype(np.uint8)
+
+                    if approx_valve_mask.sum() > 0:
+                        print(t,j)
+
+                    # Get XYZ coordinates for aortic valve 
+                    xyz = series.XYZs[j].reshape((self.sz, self.sz, 3))
+                    valve_coords = xyz[approx_valve_mask == 1]
+                    
+                    if len(valve_coords) > 0:
+                        valve_xyzs.append(np.mean(valve_coords, axis=0))
 
         # Calculate median valve center if aortic valve found
         if len(valve_xyzs) > 0:
@@ -482,6 +497,7 @@ class DicomExam:
 
         # Predict aortic valve position and direction
         self.predict_aortic_valve_position()
+        print(self.valve_center)
         if self.valve_center is not None:
             self.valve_center = self.valve_center - self.center
             

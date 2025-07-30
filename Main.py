@@ -27,7 +27,7 @@ local_path    = os.getcwd()
 data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Patient_data/Healthy/'
 
 # data_dir = "/data.lfpn/ibraun/Code/paper_volume_calculation/Human_data"
-output_folder='test/test' 
+output_folder='test/test_ES' 
 
 # output_folder = 'outputs_healthy_GUI'
 
@@ -138,9 +138,9 @@ for dataset_to_use in datasets:
         start_time = time.time()
         print("Running Mesh Fitting...")
         #Fit 3D Volumetric meshes to the generated Segmentation masks
-        end_dices = fit_mesh(de,training_steps=10000, time_frames_to_fit="all", burn_in_length=0, train_mode='normal',
+        end_dices = fit_mesh(de,training_steps=500, time_frames_to_fit=[6], burn_in_length=0, train_mode='normal',
 		mode_loss_weight = 7.405277111193427e-07, #how strongly to penalise large mode values
-		global_shift_penalty_weigth = 0.3, steps_between_progress_update=100,
+		global_shift_penalty_weigth = 0.3, steps_between_progress_update=10,
 		lr =  0.095, num_cycle = 1, num_modes = 25) #fits a mesh to every time frame. Check the function definition for a list of its arguments
         end_time = time.time()
 
