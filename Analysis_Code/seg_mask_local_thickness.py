@@ -134,12 +134,17 @@ if __name__ == "__main__":
     for i in range(9):
         seg_mask = np.load(f"/data.lfpn/ibraun/Code/paper_volume_calculation/Segmentation masks/prepped_masks_t00_z0{i}.npy")
         h, w = seg_mask.shape[:2]  # height, width
+        print(seg_mask.shape)
+        sys.exit()
         start_x = w // 2 - crop_size // 2
         start_y = h // 2 - crop_size // 2
         seg_mask = seg_mask[start_y:start_y+crop_size, start_x:start_x+crop_size]
         seg_masks.append(seg_mask)
 
     seg_masks = np.array(seg_masks)
+
+    print(seg_masks.shape)
+    sys.exit()
 
     # fig, axes = plt.subplots(1, 9, figsize=(18, 2))  # wide figure, 9 columns
 

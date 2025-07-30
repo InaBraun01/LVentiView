@@ -189,11 +189,14 @@ for i, index in enumerate(indices):
     outer_boundary = np.stack([ox, oy], axis=1)
 
     mask_gen, x, y, outer_boundary, inner_boundary = create_ring_mask_with_hole(outer_boundary, inner_boundary)
+    print(mask_gen.shape)
 
     manual_masks_bp.append((mask_gen == 3).astype(np.uint8))
     manual_masks_myo.append((mask_gen == 2).astype(np.uint8))
 
     mask_loaded = np.load(f"/data.lfpn/ibraun/Code/paper_volume_calculation/Segmentation masks/prepped_masks_t00_z0{i+1}.npy")
+    print(mask_loaded.shape)
+    sys.exit()
     rotated_mask =  np.flipud(np.rot90(mask_loaded, k=1))
     automated_masks_bp.append((rotated_mask == 3).astype(np.uint8))
     automated_masks_myo.append((rotated_mask == 2).astype(np.uint8))
