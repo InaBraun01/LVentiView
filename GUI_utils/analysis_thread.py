@@ -11,13 +11,14 @@ class AnalysisThread(QThread):
     cardiac_plots_signal = pyqtSignal(str)
     finished_signal = pyqtSignal()
 
-    def __init__(self, input_folder, output_folder, do_clean=True, do_cardiac=True, clean_params = None):
+    def __init__(self, input_folder, output_folder, do_clean=True, do_cardiac=True, clean_params = None, crop_params = None):
         super().__init__()
         self.input_folder = input_folder
         self.output_folder = output_folder
         self.do_clean = do_clean
         self.do_cardiac = do_cardiac
         self.clean_params = clean_params or {}
+        self.crop_params = crop_params or {}
 
     def run(self):
         try:
@@ -25,7 +26,7 @@ class AnalysisThread(QThread):
             self.log_signal.emit("Loading DICOM data...")
             de = DicomExam(self.input_folder, self.output_folder)
             self.log_signal.emit("Running segmentation...")
-            segment(de)
+            segment(de, **self.crop_params)
             self.log_signal.emit("Save Segmentation Results ..")
             de.save_images(prefix='full')
             seg_image_folder = os.path.join(de.folder['initial_segs'])

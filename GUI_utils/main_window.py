@@ -35,7 +35,7 @@ class MainWindow(QWidget):
         super().__init__()
         self.folder_manager = FolderManager()
 
-        self.setWindowTitle("Main Window")
+        self.setWindowTitle("Home Page")
         self.resize(900, 860)
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
@@ -57,7 +57,12 @@ class MainWindow(QWidget):
 
     def show_analysis_page(self):
         self.stack.setCurrentWidget(self.analysis_page)
+        self.setWindowTitle("Segmentation Module")
+
     def show_mesh_page(self):
         self.stack.setCurrentWidget(self.mesh_page)
+        self.setWindowTitle("Mesh Generation Module")
+
     def show_start_page(self):
         self.stack.setCurrentWidget(self.start_page)
+        self.setWindowTitle("Home Page")

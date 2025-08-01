@@ -1,10 +1,11 @@
 import os
 import sys
 import glob
+import csv
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog, QTextEdit,
     QToolButton, QLineEdit, QGroupBox, QFormLayout, QTabWidget, QComboBox, QListWidget, 
-    QListWidgetItem, QCheckBox, QProgressBar, QScrollArea
+    QListWidgetItem, QCheckBox, QProgressBar, QScrollArea, QPlainTextEdit
 )
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QIntValidator, QPixmap
@@ -23,7 +24,6 @@ class MeshGenerationApp(QWidget):
         super().__init__()
 
         self.folder_manager = folder_manager
-        self.setWindowTitle("Mesh Generation")
         self.resize(900, 900)
 
          # === Outer layout for the entire app ===
@@ -116,7 +116,6 @@ class MeshGenerationApp(QWidget):
             ('cp_frequency', 'Control Point Frequency', '50'),
             ('mesh_model_dir', 'Shape Model Directory', 'ShapeModel'),
             ('steps_between_fig_saves', 'Steps between Mesh Update', '50')
-
         ]
 
         for key, label, default in advanced_fitting_parms:
@@ -157,6 +156,7 @@ class MeshGenerationApp(QWidget):
         weight_layout = QFormLayout(weight_params_widget)
 
         weight_params = [
+            ('dice_loss_weight', "Dice loss weight", '5'),
             ('mode_loss_weight', 'Mode weight', '0.05'),
             ('global_shift_penalty_weigth', 'Global Shift Penalty', '0.3'),
             ('slice_shift_penalty_weigth', 'Slice Shift Penalty', '10'),
@@ -171,13 +171,12 @@ class MeshGenerationApp(QWidget):
 
         self.set_params_tab_widget.addTab(weight_params_widget, "Loss Function Weights")
 
-
-        self.volumetric_mesh_checkbox = QCheckBox("Analyse Volumetric Mesh")
+        self.volumetric_mesh_checkbox = QCheckBox("Calculate Volumes")
         self.volumetric_mesh_checkbox.setChecked(True)
         self.volumetric_mesh_checkbox.stateChanged.connect(self.on_volumetric_mesh_checked)
         self.layout.addWidget(self.volumetric_mesh_checkbox)
 
-        self.thickness_checkbox = QCheckBox("Calculate thickness")
+        self.thickness_checkbox = QCheckBox("Calculate Thickness")
         self.thickness_checkbox.setChecked(True)
         self.thickness_checkbox.stateChanged.connect(self.on_thickness_checked)
         self.layout.addWidget(self.thickness_checkbox)
@@ -208,21 +207,25 @@ class MeshGenerationApp(QWidget):
         self.mesh_image_list = QListWidget()
         self.mesh_image_list.setMaximumHeight(40)
         self.mesh_image_list.itemChanged.connect(self.on_image_checked)
-        self.layout.addWidget(QLabel("Mesh Visualization:"))
+        self.label_mesh_image = QLabel("Mesh Visualization:")
+        self.label_mesh_image.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
+        self.layout.addWidget(self.label_mesh_image)
         self.layout.addWidget(self.mesh_image_list)
 
         # Two separate analysis plot lists with labels
-        self.volumetric_analysis_label = QLabel("Volumetric Analysis Plots:")
         self.volumetric_analysis_list = QListWidget()
         self.volumetric_analysis_list.setMaximumHeight(40)
         self.volumetric_analysis_list.itemChanged.connect(self.on_image_checked)
+        self.volumetric_analysis_label= QLabel("Blood Pool and Myocardium Volumes:")
+        self.volumetric_analysis_label.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
         self.layout.addWidget(self.volumetric_analysis_label)
         self.layout.addWidget(self.volumetric_analysis_list)
 
-        self.thickness_analysis_label = QLabel("Thickness Analysis Plots:")
         self.thickness_analysis_list = QListWidget()
         self.thickness_analysis_list.setMaximumHeight(40)
         self.thickness_analysis_list.itemChanged.connect(self.on_image_checked)
+        self.thickness_analysis_label = QLabel("Local Thickness Estimation:")
+        self.thickness_analysis_label.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
         self.layout.addWidget(self.thickness_analysis_label)
         self.layout.addWidget(self.thickness_analysis_list)
 
@@ -230,6 +233,17 @@ class MeshGenerationApp(QWidget):
         self.image_display.setAlignment(Qt.AlignCenter)
         self.image_display.setMinimumHeight(300)
         self.layout.addWidget(self.image_display)
+
+        #Text box to print EDV, ESV, SV and EF
+        self.results_title = QLabel("Computed Cardiac Function Parameters:")
+        self.results_title.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
+        self.layout.addWidget(self.results_title)
+
+        # Text box to display EDV, ESV, SV and EF
+        self.results_box = QPlainTextEdit()
+        self.results_box.setReadOnly(True)  # Make it non-editable
+        self.layout.addWidget(self.results_box)
+
 
         self.volumetric_mesh_checked = self.volumetric_mesh_checkbox.isChecked()
         self.thickness_checked = self.thickness_checkbox.isChecked()
@@ -307,7 +321,7 @@ class MeshGenerationApp(QWidget):
             'burn_in_length', 'cp_frequency', 'steps_between_fig_saves'
         ]
         float_params = [
-            'lr', 'mode_loss_weight', 'global_shift_penalty_weigth',
+            'lr', 'dice_loss_weight', 'mode_loss_weight', 'global_shift_penalty_weigth',
             'slice_shift_penalty_weigth', 'rotation_penalty_weigth'
         ]
         boolean_params = [
@@ -505,7 +519,6 @@ class MeshGenerationApp(QWidget):
         try:
             patterns = ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff")
             image_files = []
-            print(plot_folder)
             for p in patterns:
                 image_files.extend(glob.glob(os.path.join(plot_folder, p)))
 
@@ -513,6 +526,10 @@ class MeshGenerationApp(QWidget):
             target_list = None
             if self.current_analysis_step == 'volumetric':
                 target_list = self.volumetric_analysis_list
+                # Now also load and display the metrics from CSV
+                dir_name = os.path.dirname(plot_folder)
+                csv_path = os.path.join(dir_name, "ED_ES_states.csv")  # Need to still replace this, so that it works
+                self.load_and_display_metrics(csv_path)
             elif self.current_analysis_step == 'thickness':
                 target_list = self.thickness_analysis_list
             
@@ -599,3 +616,28 @@ class MeshGenerationApp(QWidget):
     def update_progress(self, current, total):
         self.progressBar.setMaximum(total)
         self.progressBar.setValue(current)
+
+
+    def load_and_display_metrics(self, csv_path):
+        if not os.path.exists(csv_path):
+            self.results_box.setPlainText("Results file not found.")
+            return
+
+        lines = []
+        with open(csv_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                name = row['Parameter']
+                value = row['volume']
+                time_step = row['time_frame']
+                if time_step:
+                    lines.append(f"{name} =  {value}ml")
+                    lines.append(f"Calculated for time step: {time_step}")
+                elif name=="EF":
+                    lines.append(f"{name}: {value}%")
+                elif name=="SV":
+                    lines.append(f"{name}: {value}ml")
+
+        result_text = "\n".join(lines)
+        self.results_box.setPlainText(result_text)
+

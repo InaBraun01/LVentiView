@@ -1,8 +1,9 @@
 import os
+import csv
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, QTextEdit, 
                              QFileDialog, QHBoxLayout, QListWidget, QListWidgetItem, 
                              QSizePolicy, QCheckBox, QToolButton,QGroupBox, QTabWidget,
-                             QFormLayout, QLineEdit, QScrollArea)
+                             QFormLayout, QLineEdit, QScrollArea, QPlainTextEdit)
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap, QIntValidator, QValidator
 from .analysis_thread import AnalysisThread
@@ -34,7 +35,6 @@ class DicomAnalysisApp(QWidget):
     def __init__(self,folder_manager):
         super().__init__()
         self.folder_manager = folder_manager
-        self.setWindowTitle("DICOM Analysis with Plots Viewer")
         self.resize(900, 860)
 
         # --- Main layout ---
@@ -71,6 +71,7 @@ class DicomAnalysisApp(QWidget):
         self.setup_folder_ui()
 
         self.param_fields = {}
+        self.crop_param_fields = {}
 
         # Only tab to select parameters
         self.set_params_group = QGroupBox("Set Parameters")
@@ -89,9 +90,10 @@ class DicomAnalysisApp(QWidget):
         clean_params_layout = QFormLayout(clean_params_widget)
 
         clean_params = [
-            ('percentage_base', 'Percentage threshold at base', '0.3'),
-            ('percentage_apex', 'Percentage threshold at apex', '0.2'),
-            ('slice_threshold', 'Threshold of missing slices', '1')
+            ('percentage_base', 'Exclusion threshold at base', '0.3'),
+            ('percentage_apex', 'Exclusion threshold at apex', '0.2'),
+            ('slice_threshold', 'Exclusion threshold of missing slices', '1'),
+            ('margin_factor','Multiplicative padding factor', '2.5')
         ]
 
         for key, label, default in clean_params:
@@ -106,17 +108,22 @@ class DicomAnalysisApp(QWidget):
             elif key == 'slice_threshold':
                 # Integer validator for slice_threshold
                 input_widget.setValidator(QIntValidator(0, 1000000, self))
+
+            if key == 'margin_factor':
+                self.crop_param_fields[key] = input_widget
             
+            else:
+                self.param_fields[key] = input_widget
+
             clean_params_layout.addRow(label + ':', input_widget)
-            self.param_fields[key] = input_widget
         self.set_params_tab_widget.addTab(clean_params_widget, "MRI Cleaning Parameters")
 
         # Checkboxes
-        self.clean_data_checkbox = QCheckBox("Clean data after segmentation")
+        self.clean_data_checkbox = QCheckBox("Data Cleaning")
         self.clean_data_checkbox.setChecked(True)
         self.layout.addWidget(self.clean_data_checkbox)
 
-        self.cardiac_plots_checkbox = QCheckBox("Generate cardiac parameter plots")
+        self.cardiac_plots_checkbox = QCheckBox("Calculate Volumes")
         self.cardiac_plots_checkbox.setChecked(True)
         self.cardiac_plots_checkbox.stateChanged.connect(self.toggle_cardiac_plots_visibility)
         self.layout.addWidget(self.cardiac_plots_checkbox)
@@ -144,11 +151,14 @@ class DicomAnalysisApp(QWidget):
         self.seg_image_list = QListWidget()
         self.seg_image_list.itemChanged.connect(self.on_seg_image_checked)
         self.seg_image_list.setMaximumHeight(100)  # you can tune this (e.g., 80, 120)
-        self.layout.addWidget(QLabel("Segmentation Images:"))
+        self.label_segmentation = QLabel("Segmentation Masks:")
+        self.label_segmentation.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
+        self.layout.addWidget(self.label_segmentation)
         self.layout.addWidget(self.seg_image_list)
 
         # Cardiac plots label and list
-        self.label_cardiac = QLabel("Cardiac Parameter Plots:")
+        self.label_cardiac = QLabel("Blood Pool and Myocardium Volumes:")
+        self.label_cardiac.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
         self.cardiac_plot_list = QListWidget()
         self.cardiac_plot_list.itemChanged.connect(self.on_cardiac_plot_checked)
         self.cardiac_plot_list.setMaximumHeight(100)  # you can tune this
@@ -168,8 +178,18 @@ class DicomAnalysisApp(QWidget):
         self.image_display.setStyleSheet("border: 1px solid gray;")
         self.layout.addWidget(self.image_display, stretch=3)
 
+        #Text box to print EDV, ESV, SV and EF
+        self.results_title = QLabel("Computed Cardiac Function Parameters:")
+        self.results_title.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
+        self.layout.addWidget(self.results_title)
+
+        # Text box to display EDV, ESV, SV and EF
+        self.results_box = QPlainTextEdit()
+        self.results_box.setReadOnly(True)  # Make it non-editable
+        self.layout.addWidget(self.results_box)
+
         # Button to go to Mesh Generation
-        self.to_mesh_button = QPushButton("Go to Mesh Generation")
+        self.to_mesh_button = QPushButton("Go to Mesh Generation Module")
         self.to_mesh_button.clicked.connect(self.switchToMeshRequested.emit)
         self.to_mesh_button.hide() 
         self.layout.addStretch()
@@ -193,7 +213,7 @@ class DicomAnalysisApp(QWidget):
         # Input folder
         input_layout = QHBoxLayout()
         self.input_label = QLabel("No folder selected")
-        btn_pick_input = QPushButton("Pick DICOM Input Folder...")
+        btn_pick_input = QPushButton("Select MRI Data Folder...")
         btn_pick_input.clicked.connect(self.pick_input_folder)
         input_layout.addWidget(self.input_label)
         input_layout.addWidget(btn_pick_input)
@@ -202,14 +222,14 @@ class DicomAnalysisApp(QWidget):
         # Output folder
         output_layout = QHBoxLayout()
         self.output_label = QLabel("No folder selected")
-        btn_pick_output = QPushButton("Pick Output Folder")
+        btn_pick_output = QPushButton("Select Output Folder")
         btn_pick_output.clicked.connect(self.pick_output_folder)
         output_layout.addWidget(self.output_label)
         output_layout.addWidget(btn_pick_output)
         self.layout.addLayout(output_layout)
     
     def pick_input_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select DICOM Input Folder")
+        folder = QFileDialog.getExistingDirectory(self, "Select MRI Data Folder")
         if folder:
             self.folder_manager.set_input_folder(folder)
     
@@ -239,12 +259,13 @@ class DicomAnalysisApp(QWidget):
 
     def run_analysis(self):
         if not self.selected_input_folder or not self.selected_output_folder:
-            self.log("Please select both input and output folders.")
+            self.log("Please select both input and output folder.")
             return
 
         self.btn_run.setEnabled(False)
         self.log("Starting analysis...")
         clean_params = self.get_clean_params()
+        crop_params = self.get_crop_params()
 
         self.seg_image_list.clear()
         self.cardiac_plot_list.clear()
@@ -259,7 +280,8 @@ class DicomAnalysisApp(QWidget):
             self.selected_output_folder,
             do_clean=do_clean,
             do_cardiac=do_cardiac,
-            clean_params = clean_params
+            clean_params = clean_params,
+            crop_params = crop_params
         )
         self.analysis_thread.log_signal.connect(self.log)
         self.analysis_thread.seg_images_signal.connect(self.load_seg_images_from_folder)
@@ -299,9 +321,16 @@ class DicomAnalysisApp(QWidget):
                 self.cardiac_plot_list.addItem(item)
 
             if not images:
-                self.log(f"No cardiac parameter plots found.")
+                self.log(f"No volume plots found.")
+
+            # Now also load and display the metrics from CSV
+            dir_name = os.path.dirname(folder_path)
+            csv_path = os.path.join(dir_name, "ED_ES_state.csv")  # Need to still replace this, so that it works
+            print(csv_path)
+            self.load_and_display_metrics(csv_path)
+
         except Exception as e:
-            self.log(f"Failed to load cardiac parameter plots: {e}")
+            self.log(f"Failed to load volume plots: {e}")
         self.cardiac_plot_list.blockSignals(False)
 
     def on_seg_image_checked(self, item):
@@ -391,3 +420,39 @@ class DicomAnalysisApp(QWidget):
                 except ValueError:
                     self.log_output.append(f"Invalid integer for {key}: {text}")
         return params
+    
+
+    def get_crop_params(self):
+        params = {}
+        for key, widget in self.crop_param_fields.items():
+            text = widget.text().strip()
+            value = float(text)
+            params[key] = value
+
+        return params
+    
+    import csv
+
+    def load_and_display_metrics(self, csv_path):
+        if not os.path.exists(csv_path):
+            self.results_box.setPlainText("Results file not found.")
+            return
+
+        lines = []
+
+        with open(csv_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                name = row['Parameter']
+                value = row['Value']
+                time_step = row['Time_step']
+                if name=="EF":
+                    lines.append(f"{name}: {value}%")
+                elif name=="SV":
+                    lines.append(f"{name}: {value}ml")
+                else:
+                    lines.append(f"{name} =  {value}ml")
+                    lines.append(f"Calculated for time step: {time_step}")
+
+        result_text = "\n".join(lines)
+        self.results_box.setPlainText(result_text)
