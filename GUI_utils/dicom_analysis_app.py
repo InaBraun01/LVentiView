@@ -2,7 +2,7 @@ import os
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, QTextEdit, 
                              QFileDialog, QHBoxLayout, QListWidget, QListWidgetItem, 
                              QSizePolicy, QCheckBox, QToolButton,QGroupBox, QTabWidget,
-                             QFormLayout, QLineEdit)
+                             QFormLayout, QLineEdit, QScrollArea)
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap, QIntValidator, QValidator
 from .analysis_thread import AnalysisThread
@@ -26,8 +26,6 @@ class PercentageValidator(QValidator):
             if input_str in ['0', '0.', '1', '1.'] or (input_str.count('.') == 1 and input_str.replace('.', '').isdigit()):
                 return QValidator.Intermediate, input_str, pos
             return QValidator.Invalid, input_str, pos
-        
-
 
 class DicomAnalysisApp(QWidget):
     backRequested = pyqtSignal()
@@ -39,8 +37,23 @@ class DicomAnalysisApp(QWidget):
         self.setWindowTitle("DICOM Analysis with Plots Viewer")
         self.resize(900, 860)
 
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
+        # --- Main layout ---
+        main_layout = QVBoxLayout(self)
+        self.setLayout(main_layout)
+
+        # --- Scroll area setup ---
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_area.setWidget(scroll_content)
+
+        # Add scroll area to the main window layout
+        main_layout.addWidget(scroll_area)
+
+        # All widgets now go inside this scroll layout
+        self.layout = scroll_layout
 
         # Back button top left as a QToolButton with a left arrow
         self.back_button = QToolButton()

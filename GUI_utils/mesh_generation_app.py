@@ -4,7 +4,7 @@ import glob
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog, QTextEdit,
     QToolButton, QLineEdit, QGroupBox, QFormLayout, QTabWidget, QComboBox, QListWidget, 
-    QListWidgetItem, QCheckBox, QProgressBar
+    QListWidgetItem, QCheckBox, QProgressBar, QScrollArea
 )
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QIntValidator, QPixmap
@@ -25,7 +25,21 @@ class MeshGenerationApp(QWidget):
         self.folder_manager = folder_manager
         self.setWindowTitle("Mesh Generation")
         self.resize(900, 900)
-        self.layout = QVBoxLayout(self)
+
+         # === Outer layout for the entire app ===
+        outer_layout = QVBoxLayout(self)
+
+        # === Scroll Area setup ===
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)  # important for resizing
+        outer_layout.addWidget(scroll_area)
+
+        # === Inner widget that goes inside the scroll area ===
+        scroll_widget = QWidget()
+        scroll_area.setWidget(scroll_widget)
+
+        # === Main content layout inside the scroll area ===
+        self.layout = QVBoxLayout(scroll_widget)  # note: self.layout is now on scroll_widget
 
         # Back button top left as a QToolButton with a left arrow
         self.back_button = QToolButton()
@@ -62,26 +76,18 @@ class MeshGenerationApp(QWidget):
 
         fitting_params = [
             ('time_frames_to_fit', 'Time Frames to be Fit', 'all'),
-            ('num_cycle', 'Number of Cycles', '1'),
-            ('num_modes', 'Number of Modes', '25'),
-            ('lr', 'Learning Rate', '0.003'),
             ('training_steps', 'Training Steps', '1'),
-            ('train_mode', 'Train Mode', 'normal'),
+            ('lr', 'Learning Rate', '0.003'),
+            ('num_modes', 'Number of Modes', '25'),
         ]
 
         for key, label, default in fitting_params:
-            if key == 'train_mode':
-                input_widget = QComboBox()
-                input_widget.addItems(['normal', 'until_no_progress'])
-                index = input_widget.findText(default)
-                if index >= 0:
-                    input_widget.setCurrentIndex(index)
-            elif key == 'time_frames_to_fit':
+            if key == 'time_frames_to_fit':
                 input_widget = QComboBox()
                 input_widget.setEditable(True)  # Allow custom input
-                input_widget.addItems(['all', 'all_loop'])
+                input_widget.addItems(['all'])
                 # Set default value
-                if default in ['all', 'all_loop']:
+                if default in ['all']:
                     index = input_widget.findText(default)
                     if index >= 0:
                         input_widget.setCurrentIndex(index)
@@ -89,69 +95,36 @@ class MeshGenerationApp(QWidget):
                     input_widget.setCurrentText(default)
                 # Add placeholder text to help user understand the format
                 input_widget.setEditText(default)
-                input_widget.lineEdit().setPlaceholderText("Enter 'all', 'all_loop', or comma-separated positive integers (e.g., 1,2,3 for frames 1,2,3)")
+                input_widget.lineEdit().setPlaceholderText("Enter 'all or comma-separated positive integers (e.g., 1,2,3 for frames 1,2,3)")
             else:
                 input_widget = QLineEdit()
                 input_widget.setText(default)
-                if key in ['num_cycle', 'num_modes', 'training_steps']:
+                if key in ['num_modes', 'training_steps']:
                     input_widget.setValidator(QIntValidator(0, 1000000, self))
             
             fitting_params_layout.addRow(label + ':', input_widget)
             self.param_fields[key] = input_widget
 
         self.set_params_tab_widget.addTab(fitting_params_widget, "Mesh Fitting Parameters")
-                # Printing parameters page
-        printing_params_widget = QWidget()
-        printing_params_layout = QFormLayout(printing_params_widget)
 
-        printing_params = [
-            ('steps_between_progress_update', 'Steps Between Progress Update', '400'),
-            ('show_progress', 'Show Progress', 'True'),
-        ]
-
-        for key, label, default in printing_params:
-            if key == 'show_progress':
-                input_widget = QComboBox()
-                input_widget.addItems(['True', 'False'])
-                index = input_widget.findText(default)
-                if index >= 0:
-                    input_widget.setCurrentIndex(index)
-            else:
-                input_widget = QLineEdit()
-                input_widget.setText(default)
-                if key == 'steps_between_progress_update':
-                    input_widget.setValidator(QIntValidator(0, 1000000, self))
-            printing_params_layout.addRow(label + ':', input_widget)
-            self.param_fields[key] = input_widget
-
-        self.set_params_tab_widget.addTab(printing_params_widget, "Printing Parameters")
 
         # Advanced fitting parameters page
         advanced_fitting_params_widget = QWidget()
         advanced_fitting_layout = QFormLayout(advanced_fitting_params_widget)
 
         advanced_fitting_parms = [
-            ('burn_in_length', 'Burn in Length', '0'),
             ('cp_frequency', 'Control Point Frequency', '50'),
-            ('random_starting_mesh', "Random Starting Mesh", 'False'),
             ('mesh_model_dir', 'Shape Model Directory', 'ShapeModel'),
             ('steps_between_fig_saves', 'Steps between Mesh Update', '50')
 
         ]
 
         for key, label, default in advanced_fitting_parms:
-            if key == 'random_starting_mesh':
-                input_widget = QComboBox()
-                input_widget.addItems(['True', 'False'])
-                index = input_widget.findText(default)
-                if index >= 0:
-                    input_widget.setCurrentIndex(index)
-            else:
-                input_widget = QLineEdit()
-                input_widget.setText(default)
-                # Fixed the condition - was checking if key equals a list, now checks if key is in the list
-                if key in ['burn_in_length', 'cp_frequency','steps_between_fig_saves']:
-                    input_widget.setValidator(QIntValidator(0, 1000000, self))
+            input_widget = QLineEdit()
+            input_widget.setText(default)
+            # Fixed the condition - was checking if key equals a list, now checks if key is in the list
+            if key in [ 'cp_frequency','steps_between_fig_saves']:
+                input_widget.setValidator(QIntValidator(0, 1000000, self))
             advanced_fitting_layout.addRow(label + ':', input_widget)
             self.param_fields[key] = input_widget
 
@@ -389,14 +362,10 @@ class MeshGenerationApp(QWidget):
                 if key in integer_params:
                     if key == 'cp_frequency':
                         params[key] = 50  # Default cp_frequency
-                    elif key in ['num_cycle']:
-                        params[key] = 1
                     elif key in ['num_modes']:
                         params[key] = 25
                     elif key in ['training_steps']:
                         params[key] = 1
-                    elif key in ['steps_between_progress_update']:
-                        params[key] = 400
                     else:
                         params[key] = 1
                 elif key in float_params:
