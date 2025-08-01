@@ -451,8 +451,7 @@ class DicomAnalysisApp(QWidget):
                 elif name=="SV":
                     lines.append(f"{name}: {value}ml")
                 else:
-                    lines.append(f"{name} =  {value}ml")
-                    lines.append(f"Calculated for time step: {time_step}")
+                    lines.append(f"{name} =  {value}ml. Calculated for time step: {time_step}")
 
         result_text = "\n".join(lines)
         self.results_box.setPlainText(result_text)

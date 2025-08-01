@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import csv
+import statistics
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog, QTextEdit,
     QToolButton, QLineEdit, QGroupBox, QFormLayout, QTabWidget, QComboBox, QListWidget, 
@@ -212,7 +213,17 @@ class MeshGenerationApp(QWidget):
         self.layout.addWidget(self.label_mesh_image)
         self.layout.addWidget(self.mesh_image_list)
 
+        #Text box to print Blood pool and Myocardial dice
+        self.dice_title = QLabel("Fit of Meshes to Segmentation Masks:")
+        self.dice_title.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
+        self.layout.addWidget(self.dice_title)
+        self.dice_box = QPlainTextEdit()
+        self.dice_box.setReadOnly(True)  # Make it non-editable
+        self.dice_box.setMaximumHeight(40)
+        self.layout.addWidget(self.dice_box)
+
         # Two separate analysis plot lists with labels
+        #For volume calculation
         self.volumetric_analysis_list = QListWidget()
         self.volumetric_analysis_list.setMaximumHeight(40)
         self.volumetric_analysis_list.itemChanged.connect(self.on_image_checked)
@@ -221,13 +232,15 @@ class MeshGenerationApp(QWidget):
         self.layout.addWidget(self.volumetric_analysis_label)
         self.layout.addWidget(self.volumetric_analysis_list)
 
+        #for thickness calculation
         self.thickness_analysis_list = QListWidget()
-        self.thickness_analysis_list.setMaximumHeight(40)
+        self.thickness_analysis_list.setMaximumHeight(200)
         self.thickness_analysis_list.itemChanged.connect(self.on_image_checked)
         self.thickness_analysis_label = QLabel("Local Thickness Estimation:")
         self.thickness_analysis_label.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
         self.layout.addWidget(self.thickness_analysis_label)
         self.layout.addWidget(self.thickness_analysis_list)
+
 
         self.image_display = QLabel("No image selected")
         self.image_display.setAlignment(Qt.AlignCenter)
@@ -238,12 +251,9 @@ class MeshGenerationApp(QWidget):
         self.results_title = QLabel("Computed Cardiac Function Parameters:")
         self.results_title.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
         self.layout.addWidget(self.results_title)
-
-        # Text box to display EDV, ESV, SV and EF
         self.results_box = QPlainTextEdit()
         self.results_box.setReadOnly(True)  # Make it non-editable
         self.layout.addWidget(self.results_box)
-
 
         self.volumetric_mesh_checked = self.volumetric_mesh_checkbox.isChecked()
         self.thickness_checked = self.thickness_checkbox.isChecked()
@@ -512,6 +522,12 @@ class MeshGenerationApp(QWidget):
                 first_item = self.mesh_image_list.item(0)
                 if first_item:
                     first_item.setCheckState(Qt.Checked)
+
+            
+            dir_name = os.path.dirname(os.path.dirname(plot_folder))
+            csv_path = os.path.join(dir_name, "end_dice.csv")  # Need to still replace this, so that it works
+            self.load_and_display_dice_stats(csv_path)
+
         except Exception as e:
             self.log_output.append(f"Error processing mesh plots: {str(e)}")
 
@@ -631,8 +647,7 @@ class MeshGenerationApp(QWidget):
                 value = row['volume']
                 time_step = row['time_frame']
                 if time_step:
-                    lines.append(f"{name} =  {value}ml")
-                    lines.append(f"Calculated for time step: {time_step}")
+                    lines.append(f"{name} =  {value}ml. Calculated for time step: {time_step}")
                 elif name=="EF":
                     lines.append(f"{name}: {value}%")
                 elif name=="SV":
@@ -641,3 +656,24 @@ class MeshGenerationApp(QWidget):
         result_text = "\n".join(lines)
         self.results_box.setPlainText(result_text)
 
+    def load_and_display_dice_stats(self, csv_path):
+        myocardium_values = []
+        bloodpool_values = []
+
+        with open(csv_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                myocardium_values.append(float(row['Myocardium Dice']))
+                bloodpool_values.append(float(row['Blood pool dice']))
+
+        myocardium_mean = statistics.mean(myocardium_values)
+        myocardium_std = statistics.stdev(myocardium_values)
+        bloodpool_mean = statistics.mean(bloodpool_values)
+        bloodpool_std = statistics.stdev(bloodpool_values)
+
+        result_text = (
+            f"Myocardium Dice:  Mean = {myocardium_mean:.3f},  Std Dev = {myocardium_std:.3f}\n"
+            f"Blood Pool Dice:  Mean = {bloodpool_mean:.3f},  Std Dev = {bloodpool_std:.3f}"
+        )
+
+        self.dice_box.setPlainText(result_text)
