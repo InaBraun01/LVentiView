@@ -14,6 +14,7 @@ class AnalysisStepThread(QThread):
     def run(self):
         try:
             folder = self.func(self.de, log_func=self.log_signal.emit)
+            print(folder)
             self.plot_folder_signal.emit(folder)
         except Exception as e:
             self.log_signal.emit(f"Analysis step failed: {e}")

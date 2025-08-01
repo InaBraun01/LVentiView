@@ -10,9 +10,8 @@ from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QIntValidator, QPixmap
 
 from .mesh_generation import (
-    compute_cardiac_parameters_step,
     analyze_mesh_volumes_step,
-    calculate_segmentation_uncertainty_step
+    calculate_segmentation_thickness_step
 )
 from .analysis_step_thread import AnalysisStepThread
 from .mesh_fitting_thread import MeshGenerationThread
@@ -200,21 +199,15 @@ class MeshGenerationApp(QWidget):
         self.set_params_tab_widget.addTab(weight_params_widget, "Loss Function Weights")
 
 
-        # Checkboxes
-        self.cardiac_plots_checkbox = QCheckBox("Compute Cardiac Parameters")
-        self.cardiac_plots_checkbox.setChecked(True)
-        self.cardiac_plots_checkbox.stateChanged.connect(self.on_cardiac_plots_checked)
-        self.layout.addWidget(self.cardiac_plots_checkbox)
-
         self.volumetric_mesh_checkbox = QCheckBox("Analyse Volumetric Mesh")
         self.volumetric_mesh_checkbox.setChecked(True)
         self.volumetric_mesh_checkbox.stateChanged.connect(self.on_volumetric_mesh_checked)
         self.layout.addWidget(self.volumetric_mesh_checkbox)
 
-        self.uncertainty_checkbox = QCheckBox("Calculate Uncertainty")
-        self.uncertainty_checkbox.setChecked(True)
-        self.uncertainty_checkbox.stateChanged.connect(self.on_uncertainty_checked)
-        self.layout.addWidget(self.uncertainty_checkbox)
+        self.thickness_checkbox = QCheckBox("Calculate thickness")
+        self.thickness_checkbox.setChecked(True)
+        self.thickness_checkbox.stateChanged.connect(self.on_thickness_checked)
+        self.layout.addWidget(self.thickness_checkbox)
 
         # --- ALL RESULTS WIDGETS OUTSIDE THE PARAM GROUP ---
         self.run_button = QPushButton("Run Mesh Generation")
@@ -245,14 +238,7 @@ class MeshGenerationApp(QWidget):
         self.layout.addWidget(QLabel("Mesh Visualization:"))
         self.layout.addWidget(self.mesh_image_list)
 
-        # Three separate analysis plot lists with labels
-        self.cardiac_params_label = QLabel("Cardiac Parameters Plots:")
-        self.cardiac_params_list = QListWidget()
-        self.cardiac_params_list.setMaximumHeight(80)
-        self.cardiac_params_list.itemChanged.connect(self.on_image_checked)
-        self.layout.addWidget(self.cardiac_params_label)
-        self.layout.addWidget(self.cardiac_params_list)
-
+        # Two separate analysis plot lists with labels
         self.volumetric_analysis_label = QLabel("Volumetric Analysis Plots:")
         self.volumetric_analysis_list = QListWidget()
         self.volumetric_analysis_list.setMaximumHeight(40)
@@ -260,21 +246,20 @@ class MeshGenerationApp(QWidget):
         self.layout.addWidget(self.volumetric_analysis_label)
         self.layout.addWidget(self.volumetric_analysis_list)
 
-        self.uncertainty_analysis_label = QLabel("Uncertainty Analysis Plots:")
-        self.uncertainty_analysis_list = QListWidget()
-        self.uncertainty_analysis_list.setMaximumHeight(40)
-        self.uncertainty_analysis_list.itemChanged.connect(self.on_image_checked)
-        self.layout.addWidget(self.uncertainty_analysis_label)
-        self.layout.addWidget(self.uncertainty_analysis_list)
+        self.thickness_analysis_label = QLabel("Thickness Analysis Plots:")
+        self.thickness_analysis_list = QListWidget()
+        self.thickness_analysis_list.setMaximumHeight(40)
+        self.thickness_analysis_list.itemChanged.connect(self.on_image_checked)
+        self.layout.addWidget(self.thickness_analysis_label)
+        self.layout.addWidget(self.thickness_analysis_list)
 
         self.image_display = QLabel("No image selected")
         self.image_display.setAlignment(Qt.AlignCenter)
         self.image_display.setMinimumHeight(300)
         self.layout.addWidget(self.image_display)
 
-        self.cardiac_plots_checked = self.cardiac_plots_checkbox.isChecked()
         self.volumetric_mesh_checked = self.volumetric_mesh_checkbox.isChecked()
-        self.uncertainty_checked = self.uncertainty_checkbox.isChecked()
+        self.thickness_checked = self.thickness_checkbox.isChecked()
         self.pending_analysis_steps = []
 
         self.input_path = None
@@ -428,17 +413,13 @@ class MeshGenerationApp(QWidget):
         
         return params
 
-    def toggle_cardiac_plots_visibility(self, state):
-        visible = (state == Qt.Checked)
-        self.cardiac_plots_checkbox.setChecked(visible)
-
     def toggle_volumetric_mesh_visibility(self, state):
         visible = (state == Qt.Checked)
         self.volumetric_mesh_checkbox.setChecked(visible)
 
-    def toggle_uncertainty_visibility(self, state):
+    def toggle_thickness_visibility(self, state):
         visible = (state == Qt.Checked)
-        self.uncertainty_checkbox.setChecked(visible)
+        self.thickness_checkbox.setChecked(visible)
 
     def run_mesh_generation(self):
         self.log_output.append("Starting mesh fitting...")
@@ -459,12 +440,10 @@ class MeshGenerationApp(QWidget):
 
         self.pending_analysis_steps.clear()
 
-        if self.cardiac_plots_checkbox.isChecked():
-            self.pending_analysis_steps.append((compute_cardiac_parameters_step, 'cardiac'))
         if self.volumetric_mesh_checkbox.isChecked():
             self.pending_analysis_steps.append((analyze_mesh_volumes_step, 'volumetric'))
-        if self.uncertainty_checkbox.isChecked():
-            self.pending_analysis_steps.append((calculate_segmentation_uncertainty_step, 'uncertainty'))
+        if self.thickness_checkbox.isChecked():
+            self.pending_analysis_steps.append((calculate_segmentation_thickness_step, 'thickness'))
 
         self.run_next_analysis_step()
 
@@ -473,9 +452,8 @@ class MeshGenerationApp(QWidget):
             # Uncheck all other items in all lists
             self.block_all_list_signals(True)
             
-            # Get all list widgets
-            all_lists = [self.mesh_image_list, self.cardiac_params_list, 
-                        self.volumetric_analysis_list, self.uncertainty_analysis_list]
+            # Get all list widgets,
+            all_lists = [self.mesh_image_list, self.volumetric_analysis_list, self.thickness_analysis_list]
             
             for list_widget in all_lists:
                 for i in range(list_widget.count()):
@@ -493,8 +471,7 @@ class MeshGenerationApp(QWidget):
                 self.image_display.setText("Image not found")
         else:
             # Check if any image is still selected across all lists
-            all_lists = [self.mesh_image_list, self.cardiac_params_list, 
-                        self.volumetric_analysis_list, self.uncertainty_analysis_list]
+            all_lists = [self.mesh_image_list ,self.volumetric_analysis_list, self.thickness_analysis_list]
             
             any_checked = False
             for list_widget in all_lists:
@@ -535,7 +512,7 @@ class MeshGenerationApp(QWidget):
 
     def on_mesh_visual_ready(self, plot_folder):
         try:
-            patterns = ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff")
+            patterns = ("*.pdf","*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff")
             image_files = []
             for p in patterns:
                 image_files.extend(glob.glob(os.path.join(plot_folder, p)))
@@ -559,17 +536,16 @@ class MeshGenerationApp(QWidget):
         try:
             patterns = ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff")
             image_files = []
+            print(plot_folder)
             for p in patterns:
                 image_files.extend(glob.glob(os.path.join(plot_folder, p)))
 
             # Determine which list to add to based on current analysis step
             target_list = None
-            if self.current_analysis_step == 'cardiac':
-                target_list = self.cardiac_params_list
-            elif self.current_analysis_step == 'volumetric':
+            if self.current_analysis_step == 'volumetric':
                 target_list = self.volumetric_analysis_list
-            elif self.current_analysis_step == 'uncertainty':
-                target_list = self.uncertainty_analysis_list
+            elif self.current_analysis_step == 'thickness':
+                target_list = self.thickness_analysis_list
             
 
             if target_list is None:
@@ -593,38 +569,26 @@ class MeshGenerationApp(QWidget):
         except Exception as e:
             self.log_output.append(f"Error processing analysis plots: {str(e)}")
 
-    def run_analyse_sliced(self):
-        self._run_analysis_step(compute_cardiac_parameters_step, 'cardiac')
-
     def run_analyse_volumetric(self):
         self._run_analysis_step(analyze_mesh_volumes_step, 'volumetric')
 
-    def run_analyse_uncertainty(self):
-        self._run_analysis_step(calculate_segmentation_uncertainty_step, 'uncertainty')
+    def run_analyse_thickness(self):
+        self._run_analysis_step(calculate_segmentation_thickness_step, 'thickness')
 
-    def on_cardiac_plots_checked(self):
-        self.cardiac_plots_checked = self.cardiac_plots_checkbox.isChecked()
-        self.update_cardiac_widgets_visibility()
 
     def on_volumetric_mesh_checked(self):
         self.volumetric_mesh_checked = self.volumetric_mesh_checkbox.isChecked()
         self.update_volumetric_widgets_visibility()
 
-    def on_uncertainty_checked(self):
-        self.uncertainty_checked = self.uncertainty_checkbox.isChecked()
-        self.update_uncertainty_widgets_visibility()
+    def on_thickness_checked(self):
+        self.thickness_checked = self.thickness_checkbox.isChecked()
+        self.update_thickness_widgets_visibility()
 
     def update_analysis_widgets_visibility(self):
         """Update visibility of all analysis widgets based on checkbox states"""
-        self.update_cardiac_widgets_visibility()
         self.update_volumetric_widgets_visibility()
-        self.update_uncertainty_widgets_visibility()
+        self.update_thickness_widgets_visibility()
 
-    def update_cardiac_widgets_visibility(self):
-        """Show/hide cardiac analysis widgets based on checkbox state"""
-        visible = self.cardiac_plots_checkbox.isChecked()
-        self.cardiac_params_label.setVisible(visible)
-        self.cardiac_params_list.setVisible(visible)
 
     def update_volumetric_widgets_visibility(self):
         """Show/hide volumetric analysis widgets based on checkbox state"""
@@ -632,11 +596,11 @@ class MeshGenerationApp(QWidget):
         self.volumetric_analysis_label.setVisible(visible)
         self.volumetric_analysis_list.setVisible(visible)
 
-    def update_uncertainty_widgets_visibility(self):
-        """Show/hide uncertainty analysis widgets based on checkbox state"""
-        visible = self.uncertainty_checkbox.isChecked()
-        self.uncertainty_analysis_label.setVisible(visible)
-        self.uncertainty_analysis_list.setVisible(visible)
+    def update_thickness_widgets_visibility(self):
+        """Show/hide thickness analysis widgets based on checkbox state"""
+        visible = self.thickness_checkbox.isChecked()
+        self.thickness_analysis_label.setVisible(visible)
+        self.thickness_analysis_list.setVisible(visible)
 
     def log(self, message):
         self.log_output.append(message)
@@ -644,9 +608,8 @@ class MeshGenerationApp(QWidget):
     def block_all_list_signals(self, block):
         """Block or unblock signals for all list widgets"""
         self.mesh_image_list.blockSignals(block)
-        self.cardiac_params_list.blockSignals(block)
         self.volumetric_analysis_list.blockSignals(block)
-        self.uncertainty_analysis_list.blockSignals(block)
+        self.thickness_analysis_list.blockSignals(block)
 
     def display_image(self, image_path):
         pixmap = QPixmap(image_path)
