@@ -655,6 +655,7 @@ def seg_masks_compute_thickness_map(dicom_exam, n_theta_bins=36, label_of_intere
             # Compute centroid (mean of points)
             cx, cy = xs.mean(), ys.mean()
 
+
         elif dicom_exam.MRI_orientation == "apex_top":
             seg_slice = seg_stack[-1]
             
@@ -765,6 +766,6 @@ def extract_auto_seg_compare_manu_seg(dicom_exam):
     for index in indices:
         seg_mask = dicom_exam.series[0].prepped_seg[index[0],index[1],:,:]
         MRI_data = dicom_exam.series[0].prepped_data[index[0],index[1],:,:]
-        image_id = dicom_exam.series[0].image_ids[index[0],index[1]]
+        image_id = dicom_exam.series[0].image_ids[index[0],index[1]] 
         np.save(os.path.join(output_folder, f"seg_mask_{image_id}"), seg_mask)
-        np.save(os.path.join(output_folder, f"mri_data_{image_id}"), seg_mask)
+        np.save(os.path.join(output_folder, f"mri_data_{image_id}"), MRI_data)

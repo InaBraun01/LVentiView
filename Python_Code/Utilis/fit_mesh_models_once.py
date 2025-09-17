@@ -77,9 +77,6 @@ class SliceExtractor(torch.nn.Module):
 
         # Stack and shape: (1, N_points_total, 3) where N_points_total = num_slices * slice_height * slice_width
         self.grid = np.concatenate(slices)[None]
-
-        # Create an orientation (local coordinate system) for each slice
-        self.coordinate_system = torch.Tensor(makeSliceCoordinateSystems(dicom_exam)).to(device)
         
         # Normalize grid to be centered and isotropic in DICOM space
         center = dicom_exam.center
@@ -90,6 +87,9 @@ class SliceExtractor(torch.nn.Module):
 
         self.grid = 2 * (self.grid / (self.vol_shape)) - 1
         self.grid = torch.Tensor(self.grid).to(device)
+
+        # Create an orientation (local coordinate system) for each slice
+        self.coordinate_system = torch.Tensor(makeSliceCoordinateSystems(dicom_exam)).to(device)
 
     def forward(self, args):
         """
@@ -142,7 +142,7 @@ class SliceExtractor(torch.nn.Module):
             # Reshape so that each slice can have its own offset
             batched_grid = batched_grid.view(1, self.num_slices, -1, 3)
             # Offset each slice's grid along its own primary axes
-            batched_grid += torch.bmm(per_slice_offsets[0,:,None], rotated_coords)[None, :]
+            batched_grid += torch.bmm(per_slice_offsets[0,:,None], rotated_coords)[None, :,:, :]
             # Collapse back to original grid shape
             batched_grid = batched_grid.view(1, -1, 3)
 
@@ -202,13 +202,11 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         for s in dicom_exam:
             if s.name not in series_to_exclude:
                 slices.extend(s.XYZs) # Each s.XYZs is an array of world coordinates per slices
-
                 # Concatenate all slice coordinates into one big array
                 all_xyz_coords = np.concatenate(s.XYZs, axis=0)  # Shape: (total_voxels, 3)
 
                 # Compute the minimum coordinate along each axis (x, y, z)
                 volume_origin = np.min(all_xyz_coords, axis=0)
-
 
         self.num_slices = len(slices)
         self.grid = np.concatenate(slices)[None]
@@ -284,10 +282,7 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
             # Flatten back to shape [1, N, 3] for interpolation
             batched_grid = batched_grid.view(1, -1, 3)
         
-        a = warped_control_points.flip(-1) * 2 - 1
-        b = batched_control_points.flip(-1) * 2 - 1
 
-        # sys.exit()
         # --- Spline Interpolation ---
         #Interpolates how each point in batched_grid is defomed based on control points using B-spline
         #for warp points I know deformed position as well as undeformed position
@@ -326,6 +321,7 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         # Thus, it tells you for each voxel in the deformed location wether it was 
         # inside or outside the original segmentation mask.
         res = F.grid_sample(vol, interpolated_sample_locations, align_corners=True, mode='bilinear')
+    
         return res
 
 
@@ -519,6 +515,7 @@ def makeFullPPModelFromDicom(
         pcaD.fc1.bias.fill_(0.)
     pcaD.apply(make_not_trainable)
     pcaD.to(device)
+
 
     learned_inputs = learnableInputs(num_time_steps= len(dicom_exam.time_frames_to_fit), num_modes=num_modes, num_slices=num_slices)
     #initialize weights and biases with 0

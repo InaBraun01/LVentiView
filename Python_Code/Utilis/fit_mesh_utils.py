@@ -302,7 +302,7 @@ def set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se):
     new_mesh_rv_direction = np.dot(rotM, initial_mesh_rv_direction)
 
     # Determine valve direction from DICOM data
-    valve_direction = dicom_exam.aortic_valve_direction
+    valve_direction = dicom_exam.rv_direction if dicom_exam.valve_center is None else dicom_exam.aortic_valve_direction
     # # Calculate additional rotation for RV direction alignment
     rotM2 = getRotationMatrix(new_mesh_rv_direction, valve_direction)
     rotM = np.dot(rotM2, rotM)

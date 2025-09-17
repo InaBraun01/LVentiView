@@ -159,7 +159,7 @@ class DicomExam:
         with open(fname, "wb") as file_to_save:
             pickle.dump(self, file_to_save)
 
-    def clean_data(self, percentage_base = 0.5,percentage_apex = 0.2 ,slice_threshold = 1):
+    def clean_data(self, percentage_base = 0.7,percentage_apex = 0.2 ,slice_threshold = 2):
         """
         Clean and preprocess all DICOM series data.
         
@@ -181,13 +181,14 @@ class DicomExam:
         for series in self:
 
             incomplete_frames = clean_time_frames(series, slice_threshold)
+            print("Time")
+            print(incomplete_frames)
+
+            # Remove planes above base
+            clean_slices_base(series,incomplete_frames,percentage_base)
 
             # Remove slices below apex
             apex_slices = clean_slices_apex(series, percentage_apex)
-
-            # Remove planes above base
-            clean_slices_base(series,apex_slices,percentage_base)
-
 
         # Update time frame count after cleaning
         self.time_frames = self.time_frames - len(incomplete_frames)
@@ -229,65 +230,6 @@ class DicomExam:
             img = np.concatenate(np.concatenate(
                 series.prepped_data[:, :, ::ds, ::ds], axis=2))
             img = to3Ch(img)
-
-            # data = series.prepped_data
-
-            # output_folder = "/data.lfpn/ibraun/Code/paper_volume_calculation/GUI_Results/Graphics/Segmentation_Mesh_Fitting_Flow"
-            # times = [2,16,38]
-            # z_heights = [0,4,8,11,15]
-            # os.makedirs(output_folder, exist_ok=True)
-
-            # for t in times:
-            #     for z in z_heights:
-            #         img = data[t, z, :, :]  # 2D slice at time t and height z
-
-            #         # Save using matplotlib
-            #         plt.imsave(
-            #             fname=os.path.join(output_folder, f"Seg_Masks_t{t}_z{z}.pdf"),
-            #             arr=img,
-            #             cmap='gray'  # Use 'gray' or change as needed
-            #         )
-
-            # Save overlaid segmentation and MRI slices
-            # if seg_data is not None:
-            #     for t in times:
-            #         for z in z_heights:
-            #             mri_slice = data[t, z, :, :]         # (H, W) grayscale
-            #             seg_slice = seg_data[t, z, :, :]     # (H, W) labels
-
-            #             # Convert to 3-channel RGB
-            #             mri_rgb = to3Ch(mri_slice)           # Grayscale → RGB
-            #             seg_rgb = to3Ch(seg_slice)           # Labels → RGB
-
-            #             overlay = mri_rgb + 0.8 * seg_rgb
-            #             overlay = overlay / overlay.max()  # scale down if >1
-            #             overlay = np.clip(overlay, 0, 1)
-
-            #             # Convert to uint8
-            #             overlay_uint8 = (overlay * 255).astype('uint8')
-
-            #             # Save to file
-            #             filename = f"Overlay_t{t}_z{z}.pdf"
-            #             filepath = os.path.join(output_folder, filename)
-            #             imageio.imwrite(filepath, overlay_uint8)
-
-            # data_seg = series.prepped_seg
-            # output_folder = "/data.lfpn/ibraun/Code/paper_volume_calculation/GUI_Results/Graphics/Segmentation_Mesh_Fitting_Flow"
-            # times = [2,39]
-            # z_heights = [0,4,8,11,15]
-            # os.makedirs(output_folder, exist_ok=True)
-
-            # for t in times:
-            #     for z in z_heights:
-            #         img = data_seg[t, z, :, :]  # 2D slice at time t and height z
-
-            #         # Save using matplotlib
-            #         plt.imsave(
-            #             fname=os.path.join(output_folder, f"Seg_Masks_t{t}_z{z}.png"),
-            #             arr=img,
-            #             cmap='gray'  # Use 'gray' or change as needed
-            #         )
-
 
             if seg_data is not None:
                 #Downsample the segmentation and convert it to RGB format
@@ -340,8 +282,6 @@ class DicomExam:
             # Identify slices with C-shape that are within LV
             slices_to_use = ((1 - series.VP_heuristic1) * 
                            (1 - series.slice_above_valveplane))
-            
-            print(slices_to_use)
 
             for t in range(self.time_frames):
                 for j in range(series.slices):
@@ -364,8 +304,8 @@ class DicomExam:
                     approx_valve_mask = dilated_bp & ~bp & ~myo
                     approx_valve_mask = approx_valve_mask.astype(np.uint8)
 
-                    if approx_valve_mask.sum() > 0:
-                        print(t,j)
+                    # if approx_valve_mask.sum() > 0:
+                    #     print(t,j)
 
                     # Get XYZ coordinates for aortic valve 
                     xyz = series.XYZs[j].reshape((self.sz, self.sz, 3))
@@ -376,9 +316,14 @@ class DicomExam:
 
         # Calculate median valve center if aortic valve found
         if len(valve_xyzs) > 0:
+            print(len(valve_xyzs))
             self.valve_center = np.median(np.array(valve_xyzs), axis=0)
+            print(self.valve_center)
+            print(self.valve_center.shape)
         else:
             self.valve_center = None
+
+            
 
     def estimate_landmarks(self, series_to_use='all', center_shift=None, init_mode=1):
         """
@@ -409,7 +354,7 @@ class DicomExam:
             self.center -= center_shift
 
         # Initialize landmark lists for averaging across series
-        self.vpc, self.sax_normal = [], []
+        self.vpc, self.sax_normal, self.rv_center  = [], [], []
         
         # Process each SAX series
         for series in self:
@@ -440,13 +385,36 @@ class DicomExam:
             Y_xyz = series.orientation[:3]
             self.sax_normal.append(np.cross(Y_xyz, X_xyz))
 
+            #get center of RV (relative to self.center):
+            rv_xyzs = []
+            for j in range(s.prepped_seg.shape[0]):
+                
+                RV = (s.prepped_seg[j] == 1)
+                
+                if np.sum(RV) == 0:
+                    continue
+
+            for i in range(len(RV)):
+
+                if s.slice_above_valveplane is not None and s.slice_above_valveplane[j,i] == 0:
+                    continue
+                
+                rv_xyzs.append(s.XYZs[i].reshape((self.sz,self.sz,3))[RV[i]==1])
+
+            if len(rv_xyzs) > 0:
+                rv_xyzs = np.concatenate(rv_xyzs,axis=0)
+                print(self.center)
+                rv_center = np.mean(rv_xyzs,axis=0) - self.center
+                self.rv_center.append( rv_center )
+
         # Average landmarks across series
         if len(self.vpc) > 0:
             self.vpc = np.mean(self.vpc, axis=0)
             self.sax_normal = np.mean(self.sax_normal, axis=0)
+            self.rv_center = np.mean(self.rv_center, axis=0)
         else:
             print('WARNING: No SAX slices found for landmark calculation')
-            self.vpc = self.sax_normal = None
+            self.vpc, self.sax_normal, self.rv_center, self.rv_direction = None, None, None, None
             return
 
         # Calculate base center and distances from center
@@ -495,9 +463,13 @@ class DicomExam:
                                   center_shift=adjustment, init_mode=init_mode)
             return
 
+        rv_direction = self.rv_center / np.linalg.norm(self.rv_center)
+        rv_direction_projected_on_sax_plane = rv_direction - np.dot(rv_direction, self.sax_normal) * self.sax_normal
+        self.rv_direction = rv_direction_projected_on_sax_plane / np.linalg.norm(rv_direction_projected_on_sax_plane)
+        print(self.rv_direction)
+
         # Predict aortic valve position and direction
         self.predict_aortic_valve_position()
-        print(self.valve_center)
         if self.valve_center is not None:
             self.valve_center = self.valve_center - self.center
             
@@ -506,3 +478,4 @@ class DicomExam:
             aortic_proj = (aortic_direction - 
                           np.dot(aortic_direction, self.sax_normal) * self.sax_normal)
             self.aortic_valve_direction = aortic_proj / np.linalg.norm(aortic_proj)
+            print(self.aortic_valve_direction)

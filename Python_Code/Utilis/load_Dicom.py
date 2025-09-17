@@ -119,7 +119,8 @@ def dataArrayFromDicomFolder(PathDicom):
             if ds.pixel_array.shape == data[t, z].shape:
                 data[t, z] = ds.pixel_array  # Store image pixel values
             placment[t, z] = 1
-            image_ids[t, z] = i
+            #image_ids[t, z] = i 
+            image_ids[t, z] = int(filenameDCM.split("-")[-1].split(".")[0])
             image_positions[z] = ds.get('ImagePositionPatient', '?')  # Position of patient
 
     # Merge adjacent timeframes with poor spatial coverage
@@ -129,10 +130,11 @@ def dataArrayFromDicomFolder(PathDicom):
             # Merge and remove the weak timeframe
             data = np.concatenate([data[:i], data[i + 1:i + 2] + data[i:i + 1], data[i + 2:]], axis=0)
             placment = np.concatenate([placment[:i], placment[i + 1:i + 2] + placment[i:i + 1], placment[i + 2:]], axis=0)
+            print("Hello")
             image_ids = np.concatenate([image_ids[:i], image_ids[i + 1:i + 2] + image_ids[i:i + 1], image_ids[i + 2:]], axis=0)
         else:
             i += 1
-
+    
     # Placeholder: This data is treated as 4D even though it's likely not volumetric over time
     is3D = False
     multifile = True

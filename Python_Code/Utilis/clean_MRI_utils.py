@@ -11,7 +11,7 @@ from Python_Code.Utilis.pytorch_segmentation_utils import (
 )
 from Python_Code.Utilis.visualizeDICOM import planeToXYZ
 
-def clean_slices_base(dicom_series, apex_slices, percentage = 0.5):
+def clean_slices_base(dicom_series, incomplete_frames, percentage = 0.7):
     """
     Remove z-slices that are above the valve plane based on valve plane detection.
     
@@ -40,12 +40,10 @@ def clean_slices_base(dicom_series, apex_slices, percentage = 0.5):
         dicom_series.XYZs: Updated coordinate list
     """
 
-    percentage = 0.7
-
-    number_time_frames = dicom_series.slice_above_valveplane.shape[0]
+    number_time_frames = dicom_series.slice_above_valveplane.shape[0] - len(incomplete_frames)
     number_z_stacks = dicom_series.slice_above_valveplane.shape[1]
     
-    # Use 30% of time frames as threshold for determining if slice should be removed
+    # Use 70% of time frames as threshold for determining if slice should be removed
     threshold = int(percentage * number_time_frames)
     z_height_remove = []
 
@@ -58,38 +56,41 @@ def clean_slices_base(dicom_series, apex_slices, percentage = 0.5):
             if dicom_series.slice_above_valveplane[col, row] == 0:  # 0 indicates above valve plane
                 number_above_base += 1
 
+                print(number_above_base, threshold)
+
             # If this slice is above valve plane in enough time frames, mark for removal
             if number_above_base >= threshold:
                 z_height_remove.append(row)
                 break
+
     
     # Handle edge case: add missing top layers if lower neighbors are already marked for removal
     # This ensures we don't leave isolated slices at the top 
     if (number_z_stacks - 3 in z_height_remove and 
         number_z_stacks - 2 not in z_height_remove and 
         number_z_stacks - 1 not in z_height_remove):
-        z_height_remove.extend([number_z_stacks - 2, number_z_stacks - 1])
+        if (number_z_stacks - 2) >= 0:
+            z_height_remove.extend([number_z_stacks - 2])
+        if (number_z_stacks - 1) >= 0:
+            z_height_remove.extend([number_z_stacks - 1])
+        
     elif (number_z_stacks - 2 in z_height_remove and 
           number_z_stacks - 1 not in z_height_remove):
-        z_height_remove.append(number_z_stacks - 1)
+        if (number_z_stacks - 1) >= 0:
+            z_height_remove.extend([number_z_stacks - 1])
 
 
     # Example threshold for closeness in integer space
-    threshold = 1  # you can set to 0 if you want only exact matches
+    #threshold = 1  # you can set to 0 if you want only exact matches
 
-    # Use set for fast membership checking
-    apex_set = set(apex_slices)
-
-    # Remove values from z_height_remove that are close to any value in apex_slices
-    z_height_remove = [
-        z - len(apex_set) for z in z_height_remove
-        if all(abs(z - a) > threshold for a in apex_set)
-    ]
-
-    print("Base")  #Base [2,8.9]
-    print(z_height_remove)
-
+    # z_height_remove = [
+    #     z for z in z_height_remove
+    #     if all(abs(z - a) > threshold for a in apex_set)
+    # ]
     
+    print(z_height_remove)
+    z_height_remove= extract_preferred_consecutive_group(z_height_remove,threshold = int(dicom_series.slices/2))
+    print(z_height_remove)
     # Remove identified slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, z_height_remove, axis=1)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, z_height_remove, axis=1)
@@ -254,8 +255,6 @@ def clean_time_frames(dicom_series, slice_threshold = 2):
                 incomplete_frames.append(time_frame)
                 break
     
-    print("Time")
-    print(incomplete_frames)
     # Remove incomplete time frames from both segmentation and image data
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, incomplete_frames, axis=0)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, incomplete_frames, axis=0)
@@ -268,6 +267,49 @@ def clean_time_frames(dicom_series, slice_threshold = 2):
 
     return incomplete_frames
 
+def extract_preferred_consecutive_group(lst, threshold):
+    if len(lst) < 2:
+        return lst
+
+    # Step 1: Fill single-number gaps (i.e., where difference == 2)
+    filled = [lst[0]]
+    for i in range(1, len(lst)):
+        prev = lst[i - 1]
+        curr = lst[i]
+        if curr - prev == 2:
+            filled.append(prev + 1)  # fill the hole
+        elif curr - prev > 2:
+            pass  # skip large gaps
+        filled.append(curr)
+
+    return filled
+
+    # # Step 2: Extract consecutive groups from filled list
+    # groups = []
+    # current = [filled[0]]
+
+    # for i in range(1, len(filled)):
+    #     if abs(filled[i] - filled[i - 1]) == 1:
+    #         current.append(filled[i])
+    #     else:
+    #         if len(current) >= 2:
+    #             groups.append(current)
+    #         current = [filled[i]]
+    
+    # if len(current) >= 2:
+    #     groups.append(current)
+
+    # if not groups:
+    #     return []
+
+    # first_group = groups[0]
+    # if min(first_group) < threshold:
+    #     # Keep the longest (or last-longest) group
+    #     max_len = max(len(g) for g in groups)
+    #     longest_groups = [g for g in groups if len(g) == max_len]
+    #     return longest_groups[-1]
+    # else:
+    #     return first_group
 
 def clean_slices_apex(dicom_series, percentage = 0.2):
     """
@@ -316,6 +358,7 @@ def clean_slices_apex(dicom_series, percentage = 0.2):
             # Extract LV myocardium and blood pool masks
             lv_mask = (dicom_series.prepped_seg[time_frame, z_slice, :, :] == 2).astype(np.uint8)
             blood_pool_mask = (dicom_series.prepped_seg[time_frame, z_slice, :, :] == 3).astype(np.uint8)
+            MRI_slice = (dicom_series.prepped_data[time_frame, z_slice, :, :] == 3).astype(np.uint8)
 
             # Count frames where LV myocardium segmentation is absent
             if lv_mask.sum() == 0:
@@ -329,19 +372,31 @@ def clean_slices_apex(dicom_series, percentage = 0.2):
             if missing_lv_count >= threshold or missing_blood_pool_count >= threshold:
                 slices_to_remove.append(z_slice)
                 break
-
-
-    if 1 in slices_to_remove:
+    
+    print("Apex")
+    print(slices_to_remove)
+    if 1 in slices_to_remove and 0 not in slices_to_remove:
         slices_to_remove.append(0)
+        slices_to_remove.sort()
 
-    if dicom_series.slices - 2 in slices_to_remove:
+    if 2 in slices_to_remove and (0 not in slices_to_remove or 1 not in slices_to_remove):
+        slices_to_remove.extend([0, 1])
+        slices_to_remove.sort()
+
+    if dicom_series.slices - 2 in slices_to_remove and dicom_series.slices - 1 not in slices_to_remove:
         slices_to_remove.append(dicom_series.slices - 1)
+        slices_to_remove.sort()
+    
+    print(slices_to_remove)
+    slices_to_remove = extract_preferred_consecutive_group(slices_to_remove,threshold = int(dicom_series.slices/2))
+    print(slices_to_remove)
 
     # Remove problematic slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, slices_to_remove, axis=1)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, slices_to_remove, axis=1)
     dicom_series.cleaned_data = np.delete(dicom_series.cleaned_data, slices_to_remove, axis=1)
     dicom_series.slices = dicom_series.slices - len(slices_to_remove)
+
 
     dicom_series.image_positions = [item for i, item in enumerate(dicom_series.image_positions) if i not in slices_to_remove]
     dicom_series.slice_locations = [item for i, item in enumerate(dicom_series.slice_locations) if i not in slices_to_remove]
@@ -411,6 +466,7 @@ def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
             # Stack cropped coordinates and flatten to (N, 3)
             xyz_coords = np.stack([X_cropped.ravel(), Y_cropped.ravel(), Z_cropped.ravel()], axis=1)
             series.XYZs.append(xyz_coords)
+
 
         # Define slices for cropping
         crop_slice_x = slice(center_x, center_x + crop_size)

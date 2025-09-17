@@ -51,7 +51,7 @@ def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
         - Uses full-scaled model for sz >= 96 (typically for human studies)
     """
     # Load the mean/average mesh model
-    if sz < 80:
+    if sz < 50:
         # Use half-scaled model for smaller left ventricles (e.g., monkey studies)
         mean_mesh_file = os.path.join(model_dir, 'Mean/LV_mean_half_scaled.vtk')
         print("Monkey")
@@ -161,7 +161,7 @@ def voxelizeUniform(mesh, sz, gridsize=None, bp_channel=False):
                                If bp_channel=True, returns (myocardium, blood_pool) tuple
     """
 
-    z_res=64
+    z_res=sz
 
     resolution = (sz, sz, z_res)
 
@@ -340,9 +340,8 @@ def set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se):
     new_mesh_rv_direction = np.dot(rotM, initial_mesh_rv_direction)
 
     # Determine valve direction from DICOM data
-    valve_direction = dicom_exam.aortic_valve_direction
-    print(new_mesh_rv_direction)
-    print(valve_direction)
+    valve_direction = dicom_exam.rv_direction if dicom_exam.valve_center is None else dicom_exam.aortic_valve_direction
+
     # # Calculate additional rotation for RV direction alignment
     rotM2 = getRotationMatrix(new_mesh_rv_direction, valve_direction)
     rotM = np.dot(rotM2, rotM)
@@ -603,9 +602,11 @@ def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel,
         # Store rendered and sliced mesh in DICOM exam object for visulization
         ones_input = torch.Tensor(np.ones((1, 1))).to(device)
         mesh_render = getSlices(se, msh[index], sz, use_bp_channel, mesh_offset, learned_inputs, ones_input, index)
+
         dicom_exam.fitted_meshes[time_step] = {}
         dicom_exam.fitted_meshes[time_step].setdefault('rendered_and_sliced', []).append(
-            np.transpose(mesh_render.cpu().numpy()[0], (3, 1, 2, 0)))
+            np.transpose(outputs[index].cpu().numpy()[0], (3, 1, 2, 0)))
+        
 
         if save_mesh:
             # Create output directory

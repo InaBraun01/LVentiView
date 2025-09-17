@@ -51,6 +51,35 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
 
         d0 = one_minus_dice_loss(pred[index][:,:1], target[:,:1,:,:,:,time_step], slice_weights) * myo_weight  # Myocardium
         d1 = one_minus_dice_loss(pred[index][:,1:], target[:,1:,:,:,:,time_step], slice_weights) * bp_weight   # Blood pool
+
+        # pred = pred[index][:,:1].cpu().detach().numpy()
+        # target = target[:,:1,:,:,:,time_step].cpu().detach().numpy()
+
+        # rows = 6
+        # fig, axs = plt.subplots(rows,2)
+        # # Plot each mask
+        # for row in range(rows):
+
+        #         mask_pred = pred[0,0,:,:,row]
+        #         im = axs[row,0].imshow(mask_pred, cmap='viridis', interpolation='nearest')
+                
+        #         # Remove axis ticks for cleaner look
+        #         axs[row,0].set_xticks([])
+        #         axs[row,0].set_yticks([])
+        #         axs[0, 0].set_title("Pred")
+
+        #         mask_target = target[0,0,:,:,row]
+        #         im = axs[row,1].imshow(mask_target, cmap='viridis', interpolation='nearest')
+                
+        #         # Remove axis ticks for cleaner look
+        #         axs[row,1].set_xticks([])
+        #         axs[row,1].set_yticks([])
+        #         axs[0,1].set_title("Target")
+        
+        
+        # # Adjust layout and display
+        # plt.tight_layout()
+        # plt.savefig("test_2_new.png")
         
         # Combine segmentation losses
         d_loss = d0 + d1

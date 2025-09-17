@@ -20,7 +20,9 @@ def produce_segmentation_at_required_resolution(data, pixel_spacing, is_sax=True
         tuple: normalized data, segmentation map, center coordinates (c1, c2)
     """
     # Resample to 1mm x 1mm in-plane resolution
-    data = zoom(data, (1, 1, pixel_spacing[1], pixel_spacing[2]), order=1)
+    zoom_factors = (1, 1, pixel_spacing[1], pixel_spacing[2])
+    zoom_factors = (1,1,1,1)
+    data = zoom(data, zoom_factors, order=1)
 
     # Normalize intensities
     data = data - data.min()
