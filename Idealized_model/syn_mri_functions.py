@@ -57,8 +57,8 @@ def load_vtu_mesh(filename):
     ----------------------------------
     Retrun: mesh
     """
-    #reader = vtk.vtkXMLUnstructuredGridReader()
-    reader = vtk.vtkUnstructuredGridReader()
+    reader = vtk.vtkXMLUnstructuredGridReader()
+    #reader = vtk.vtkUnstructuredGridReader()
     reader.SetFileName(filename)
     reader.Update()
     return reader.GetOutput()
@@ -324,6 +324,7 @@ def create_ring_mask_with_hole(background, outer_boundary, inner_boundary, i, gr
     
         return mask, x, y, outer_boundary, inner_boundary
 
+#Calculate volume as a cylinder
 def calculate_vol(mask, i, distance, offset_base, offset_apex, num_slices):
     """
     Volume calculation from segmentation masks. Not taking distance between z planes account in the top layer
@@ -332,30 +333,61 @@ def calculate_vol(mask, i, distance, offset_base, offset_apex, num_slices):
     """
     x_reso = 0.8523
     y_reso = 0.8523
-    # x_reso = 0.4
-    # y_reso = 0.4
 
     pixel_myo = np.sum(mask == 2)
     pixel_bp = np.sum(mask == 3)
 
     #for base slice take only the offest as the z height
     if i == (num_slices-1):
-        #z_reso_base = offset_base
+        z_reso_base = offset_base
         #z_reso_base = 0.0
-        z_reso_base = distance
+        #z_reso_base = distance
         vol_myo = z_reso_base*x_reso*y_reso*pixel_myo
         vol_bp = z_reso_base*x_reso*y_reso*pixel_bp
 
     #for apex take offset plus thickness as the z height
     elif i == 0:
-        #z_reso_apex = distance + offset_apex
-        z_reso_apex = distance 
+        z_reso_apex = distance + offset_apex
+        #z_reso_apex = distance 
         vol_myo = z_reso_apex*x_reso*y_reso*pixel_myo
         vol_bp = z_reso_apex*x_reso*y_reso*pixel_bp
 
     else:
         vol_myo = distance*x_reso*y_reso*pixel_myo
         vol_bp = distance*x_reso*y_reso*pixel_bp
+
+    return vol_myo, vol_bp
+
+
+#Calculate the volume as a truncated cone, using linear interpolation
+def calculate_vol_cone_stump(mask_bottom, mask_top, distance, x_reso=0.8523, y_reso=0.8523):
+    """
+    Approximate volume between two slices as a truncated cone (cone stump).
+    
+    Parameters:
+    - mask_bottom: 2D array of the bottom slice
+    - mask_top: 2D array of the top slice
+    - distance: spacing between slices in mm
+    - x_reso, y_reso: pixel resolutions in mm
+
+    Returns:
+    - vol_myo, vol_bp: volumes of myocardium and blood pool
+    """
+    # Count pixels for bottom and top slice
+    pixel_myo_bottom = np.sum(mask_bottom == 2)
+    pixel_bp_bottom  = np.sum(mask_bottom == 3)
+    pixel_myo_top    = np.sum(mask_top == 2)
+    pixel_bp_top     = np.sum(mask_top == 3)
+
+    # Convert pixels to areas (mm^2)
+    area_myo_bottom = pixel_myo_bottom * x_reso * y_reso
+    area_bp_bottom  = pixel_bp_bottom * x_reso * y_reso
+    area_myo_top    = pixel_myo_top * x_reso * y_reso
+    area_bp_top     = pixel_bp_top * x_reso * y_reso
+
+    # Truncated cone formula: V = h/3 * (A1 + A2 + sqrt(A1*A2))
+    vol_myo = distance/3 * (area_myo_bottom + area_myo_top + np.sqrt(area_myo_bottom * area_myo_top))
+    vol_bp  = distance/3 * (area_bp_bottom  + area_bp_top  + np.sqrt(area_bp_bottom  * area_bp_top))
 
     return vol_myo, vol_bp
 
