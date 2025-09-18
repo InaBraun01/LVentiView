@@ -319,7 +319,7 @@ class DicomAnalysisApp(QWidget):
         self.cardiac_plot_list.blockSignals(True)
         self.cardiac_plot_list.clear()
         try:
-            images = [f for f in os.listdir(folder_path) if f.lower().endswith('.png')]
+            images = [f for f in os.listdir(folder_path) if f.lower().endswith('.pdf')]
             images.sort()
             for img_name in images:
                 item = QListWidgetItem(img_name)
