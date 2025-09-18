@@ -1,4 +1,4 @@
-import os
+import os,sys
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, QTextEdit, 
                              QFileDialog, QHBoxLayout, QListWidget, QListWidgetItem, 
                              QSizePolicy, QCheckBox, QToolButton,QGroupBox, QTabWidget,
@@ -27,6 +27,29 @@ class PercentageValidator(QValidator):
                 return QValidator.Intermediate, input_str, pos
             return QValidator.Invalid, input_str, pos
         
+
+class IntListValidator(QValidator):
+    def validate(self, input_str, pos):
+        # Allow empty input
+        if input_str.strip() == "":
+            return QValidator.Intermediate, input_str, pos
+
+        # Split on commas
+        parts = input_str.split(",")
+        for part in parts:
+            part = part.strip()
+            if part == "":
+                # Allow trailing comma while typing (e.g. "1,2,")
+                continue
+            if not part.isdigit() or int(part) <= 0:
+                return QValidator.Invalid, input_str, pos
+
+        return QValidator.Acceptable, input_str, pos
+
+    def fixup(self, input_str):
+        # Auto-clean invalid input: keep only positive numbers
+        parts = [p.strip() for p in input_str.split(",") if p.strip().isdigit() and int(p.strip()) > 0]
+        return ", ".join(parts)
 
 
 class DicomAnalysisApp(QWidget):
@@ -97,6 +120,25 @@ class DicomAnalysisApp(QWidget):
             clean_params_layout.addRow(label + ':', input_widget)
             self.param_fields[key] = input_widget
         self.set_params_tab_widget.addTab(clean_params_widget, "MRI Cleaning Parameters")
+
+        # --- NEW CODE for Manual Cleaning Parameters ---
+        manual_params_widget = QWidget()
+        manual_params_layout = QFormLayout(manual_params_widget)
+
+        manual_params = [
+            ('remove_z_slices', 'Z Slices'),
+            ('remove_time_steps', 'Time Steps')
+        ]
+
+        for key, label in manual_params:
+            input_widget = QLineEdit()
+            input_widget.setText("")  # default empty
+            input_widget.setValidator(IntListValidator())  # <--- use custom validator only
+
+            manual_params_layout.addRow(label + ':', input_widget)
+            self.param_fields[key] = input_widget
+
+        self.set_params_tab_widget.addTab(manual_params_widget, "Manual Cleaning Parameters")
 
         # Checkboxes
         self.clean_data_checkbox = QCheckBox("Clean data after segmentation")
@@ -359,9 +401,11 @@ class DicomAnalysisApp(QWidget):
     def get_clean_params(self):
         params = {}
         for key, widget in self.param_fields.items():
+            print(key)
             text = widget.text().strip()
 
             if key in ['percentage_base', 'percentage_apex']:
+                # Floats in [0, 1]
                 try:
                     value = float(text)
                     if 0 <= value <= 1:
@@ -372,9 +416,25 @@ class DicomAnalysisApp(QWidget):
                 except ValueError:
                     self.log_output.append(f"Invalid float for {key}: {text}")
                     params[key] = 0.0  # Default fallback
+
             elif key == 'slice_threshold':
+                # Single integer
                 try:
                     params[key] = int(text)
                 except ValueError:
                     self.log_output.append(f"Invalid integer for {key}: {text}")
+                    params[key] = 0  # Default fallback
+
+            elif key.strip().lower() in ['remove_z_slices', 'remove_time_steps']:   
+                # List of integers
+                if text == "":
+                    params[key] = []  # Empty allowed
+                else:
+                    try:
+                        int_list = [int(x.strip()) for x in text.split(",") if x.strip() != ""]
+                        params[key] = int_list
+                    except ValueError:
+                        self.log_output.append(f"Invalid list of integers for {key}: {text}")
+                        params[key] = []  # Default fallback
+
         return params

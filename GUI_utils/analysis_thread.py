@@ -1,4 +1,4 @@
-import os
+import os,sys
 from PyQt5.QtCore import QThread, pyqtSignal
 from Python_Code.DicomExam import DicomExam
 from Python_Code.Utilis.analysis_utils import compute_cardiac_parameters
@@ -18,6 +18,8 @@ class AnalysisThread(QThread):
         self.do_clean = do_clean
         self.do_cardiac = do_cardiac
         self.clean_params = clean_params or {}
+
+        print(self.clean_params)
 
     def run(self):
         try:
