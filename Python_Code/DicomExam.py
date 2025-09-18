@@ -159,7 +159,7 @@ class DicomExam:
         with open(fname, "wb") as file_to_save:
             pickle.dump(self, file_to_save)
 
-    def clean_data(self, percentage_base = 0.7,percentage_apex = 0.2 ,slice_threshold = 2):
+    def clean_data(self, percentage_base = 0.7,percentage_apex = 0.2 ,slice_threshold = 2, remove_time_steps = None, remove_z_slices = None):
         """
         Clean and preprocess all DICOM series data.
         
@@ -172,7 +172,7 @@ class DicomExam:
 
         Args: 
             percentage_base: threshold for number of missing segmentation in order for z slice 
-                             to be removed at base(default 0.3 = 30%)
+                             to be removed at base(default 0.7 = 70%)
             percentage_apex: threshold for number of missing segmentation in order for z slice 
                              to be removed at apex (default 0.2 = 20%)
             slice_threshold: threshold of missing slices in order for the time frame 
@@ -180,15 +180,29 @@ class DicomExam:
         """
         for series in self:
 
-            incomplete_frames = clean_time_frames(series, slice_threshold)
-            print("Time")
-            print(incomplete_frames)
+            if remove_time_steps == []:
+                remove_time_steps = None
 
-            # Remove planes above base
-            clean_slices_base(series,incomplete_frames,percentage_base)
+            if remove_z_slices == []:
+                remove_z_slices = None
 
-            # Remove slices below apex
-            apex_slices = clean_slices_apex(series, percentage_apex)
+            if remove_time_steps:
+                remove_time_steps = [x - 1 for x in remove_time_steps]
+                incomplete_frames = clean_time_frames(series, slice_threshold,remove_time_steps)
+
+            else:
+                incomplete_frames = clean_time_frames(series, slice_threshold)
+
+            if remove_z_slices:
+                remove_z_slices = [x - 1 for x in remove_z_slices]
+                clean_slices_apex(series, percentage_apex,remove_z_slices)
+
+            else:
+                # Remove planes above base
+                clean_slices_base(series,incomplete_frames,percentage_base)
+
+                # Remove slices below apex
+                apex_slices = clean_slices_apex(series, percentage_apex)
 
         # Update time frame count after cleaning
         self.time_frames = self.time_frames - len(incomplete_frames)

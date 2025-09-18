@@ -130,7 +130,6 @@ def dataArrayFromDicomFolder(PathDicom):
             # Merge and remove the weak timeframe
             data = np.concatenate([data[:i], data[i + 1:i + 2] + data[i:i + 1], data[i + 2:]], axis=0)
             placment = np.concatenate([placment[:i], placment[i + 1:i + 2] + placment[i:i + 1], placment[i + 2:]], axis=0)
-            print("Hello")
             image_ids = np.concatenate([image_ids[:i], image_ids[i + 1:i + 2] + image_ids[i:i + 1], image_ids[i + 2:]], axis=0)
         else:
             i += 1

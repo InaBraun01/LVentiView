@@ -519,7 +519,9 @@ def analyze_mesh_volumes(dicom_exam) -> None:
     
     df_ed_es = pd.DataFrame([
         {'state': 'ED', 'volume': max_bp_volume * 1e-3, 'time_frame': max_bp_file},
-        {'state': 'ES', 'volume': min_bp_volume * 1e-3, 'time_frame': min_bp_file}
+        {'state': 'ES', 'volume': min_bp_volume * 1e-3, 'time_frame': min_bp_file},
+        {'state': 'SV', 'volume': (max_bp_volume - min_bp_volume) * 1e-3,'time_frame': ''},
+        {'state': 'EF', 'volume': (max_bp_volume - min_bp_volume)/max_bp_volume,'time_frame': ''}
     ])
 
     # Copy ED/ES mesh files to output directory

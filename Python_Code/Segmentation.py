@@ -20,7 +20,7 @@ from Python_Code.Utilis.pytorch_segmentation_utils import (
 from Python_Code.Utilis.visualizeDICOM import planeToXYZ, to3Ch
 
 
-def segment(dicom_exam):
+def segment(dicom_exam,margin_factor=2):
     """
     Perform cardiac segmentation on all series in a DicomExam object.
     
@@ -60,12 +60,10 @@ def segment(dicom_exam):
         # Resample segmentation back to original resolution
         # Order=0 ensures label preservation (nearest neighbor interpolation)
         zoom_factors = (1, 1, 1 / series.pixel_spacing[1], 1 / series.pixel_spacing[2])
-        zoom_factors = (1,1,1,1)
         series.seg = zoom(segmentation_mask, zoom_factors, order=0)
         
         # Calculate optimal crop size based on myocardium segmentationx
-        # crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y,margin_factor=2)
-        crop_size = 256
+        crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y,margin_factor=margin_factor)
         crop_sizes.append(crop_size)
 
         # Ensure crop region stays within image bounds

@@ -26,10 +26,10 @@ import matplotlib.pyplot as plt
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer, lr, li_model, mean_arr_batch, 
-                   tensor_labels, mode_loss_weight, global_shift_penalty_weigth,
+                   tensor_labels,dice_loss_weight, mode_loss_weight, global_shift_penalty_weigth,
                    slice_shift_penalty_weigth, rotation_penalty_weigth, se, eli, pcaD, 
                    warp_and_slice_model, train_mode, steps_between_fig_saves,
-                   steps_between_progress_update, mesh_offset, myo_weight=1, bp_weight=500, 
+                   steps_between_progress_update, mesh_offset, progress_callback, myo_weight=1, bp_weight=500, 
                    ts3=None, show_progress=True):
     """
     Main training loop for mesh fitting to medical imaging data.
@@ -101,6 +101,9 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
     cooldown=50,
     min_lr=1e-6)
 
+    initial_loss = 1000.0  # use a dummy value
+    scheduler.step(initial_loss)
+
     while should_continue_training(i, df_myo_dice, df_bp_dice, train_steps, dicom_exam):
 
         # Initialize training variables
@@ -128,7 +131,7 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
         )
 
         # Total loss
-        loss = 5*sum(dice_loss) + sum(modes_loss) + sum(global_shift_loss) + sum(rotation_loss) + sum(slice_shift_loss)
+        loss = dice_loss_weight*sum(dice_loss) + sum(modes_loss) + sum(global_shift_loss) + sum(rotation_loss) + sum(slice_shift_loss)
 
         prev_lr = scheduler.get_last_lr()[0]
         scheduler.step(sum(dice_loss).item())
@@ -165,6 +168,8 @@ def train_fit_loop(dicom_exam, train_steps, learned_inputs, opt_method,optimizer
                 df_myo_dice.loc[len(df_myo_dice)] = d0
                 df_bp_dice.loc[len(df_bp_dice)] = d1
 
+            if progress_callback:
+                progress_callback(i + 1, train_steps)
 
         i += 1
 
@@ -328,5 +333,3 @@ def print_training_progress(i, train_steps, losses, outputs, tensor_labels,dicom
               f"rotation = {losses[4].item():.3f}")
 
     return d0_values,d1_values
-
-

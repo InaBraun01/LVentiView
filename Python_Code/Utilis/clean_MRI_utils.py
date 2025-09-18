@@ -88,9 +88,7 @@ def clean_slices_base(dicom_series, incomplete_frames, percentage = 0.7):
     #     if all(abs(z - a) > threshold for a in apex_set)
     # ]
     
-    print(z_height_remove)
     z_height_remove= extract_preferred_consecutive_group(z_height_remove,threshold = int(dicom_series.slices/2))
-    print(z_height_remove)
     # Remove identified slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, z_height_remove, axis=1)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, z_height_remove, axis=1)
@@ -212,7 +210,7 @@ def estimateValvePlanePosition(dicom_exam):
         series.slice_above_valveplane = series.VP_heuristic2.astype(int)
 
 
-def clean_time_frames(dicom_series, slice_threshold = 2):
+def clean_time_frames(dicom_series, slice_threshold = 2,remove_time_steps=None):
     """
     Remove time frames that have too many missing or empty slices.
     
@@ -238,22 +236,25 @@ def clean_time_frames(dicom_series, slice_threshold = 2):
         dicom_series.prepped_data: Updated with incomplete frames removed
         dicom_series.frames: Updated frame count
     """
-    incomplete_frames = []
-    
-    # Check each time frame for missing data
-    for time_frame in range(dicom_series.prepped_data.shape[0]):
-        missing_slices_count = 0
-        
-        # Count empty slices in this time frame
-        for z_slice in range(dicom_series.prepped_data.shape[1]):
-            # Check if slice contains any non-zero data
-            if dicom_series.prepped_data[time_frame, z_slice, :, :].sum() == 0:
-                missing_slices_count += 1
+    if remove_time_steps:
+        incomplete_frames = remove_time_steps
 
-            # If more than 2 slices are missing, mark this time frame for removal
-            if missing_slices_count > slice_threshold:
-                incomplete_frames.append(time_frame)
-                break
+    else:
+        incomplete_frames = []
+        # Check each time frame for missing data
+        for time_frame in range(dicom_series.prepped_data.shape[0]):
+            missing_slices_count = 0
+            
+            # Count empty slices in this time frame
+            for z_slice in range(dicom_series.prepped_data.shape[1]):
+                # Check if slice contains any non-zero data
+                if dicom_series.prepped_data[time_frame, z_slice, :, :].sum() == 0:
+                    missing_slices_count += 1
+
+                # If more than 2 slices are missing, mark this time frame for removal
+                if missing_slices_count > slice_threshold:
+                    incomplete_frames.append(time_frame)
+                    break
     
     # Remove incomplete time frames from both segmentation and image data
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, incomplete_frames, axis=0)
@@ -311,7 +312,7 @@ def extract_preferred_consecutive_group(lst, threshold):
     # else:
     #     return first_group
 
-def clean_slices_apex(dicom_series, percentage = 0.2):
+def clean_slices_apex(dicom_series, percentage = 0.2, remove_z_slices = None):
     """
     Remove z-slices at the apex that lack sufficient LV or blood pool segmentation.
     
@@ -342,54 +343,55 @@ def clean_slices_apex(dicom_series, percentage = 0.2):
         dicom_series.slices: Updated slice count  
         dicom_series.XYZs: Updated coordinate list
     """
-    number_time_frames = dicom_series.prepped_seg.shape[0]
-    
-    # Use percentage (default 20%) of time frames as threshold for determining problematic slices
-    threshold = int(percentage * number_time_frames)
-    slices_to_remove = []
-    
-    # Check each z-slice across all time frames
-    for z_slice in range(dicom_series.prepped_seg.shape[1]):
-        missing_lv_count = 0
-        missing_blood_pool_count = 0
+    if remove_z_slices:
+        slices_to_remove = remove_z_slices
+
+    else:
+        number_time_frames = dicom_series.prepped_seg.shape[0]
         
-        # Count missing segmentations across time frames for this slice
-        for time_frame in range(number_time_frames):
-            # Extract LV myocardium and blood pool masks
-            lv_mask = (dicom_series.prepped_seg[time_frame, z_slice, :, :] == 2).astype(np.uint8)
-            blood_pool_mask = (dicom_series.prepped_seg[time_frame, z_slice, :, :] == 3).astype(np.uint8)
-            MRI_slice = (dicom_series.prepped_data[time_frame, z_slice, :, :] == 3).astype(np.uint8)
-
-            # Count frames where LV myocardium segmentation is absent
-            if lv_mask.sum() == 0:
-                missing_lv_count += 1
+        # Use percentage (default 20%) of time frames as threshold for determining problematic slices
+        threshold = int(percentage * number_time_frames)
+        slices_to_remove = []
+        
+        # Check each z-slice across all time frames
+        for z_slice in range(dicom_series.prepped_seg.shape[1]):
+            missing_lv_count = 0
+            missing_blood_pool_count = 0
             
-            # Count frames where blood pool segmentation is absent  
-            if blood_pool_mask.sum() == 0:
-                missing_blood_pool_count += 1
+            # Count missing segmentations across time frames for this slice
+            for time_frame in range(number_time_frames):
+                # Extract LV myocardium and blood pool masks
+                lv_mask = (dicom_series.prepped_seg[time_frame, z_slice, :, :] == 2).astype(np.uint8)
+                blood_pool_mask = (dicom_series.prepped_seg[time_frame, z_slice, :, :] == 3).astype(np.uint8)
+                MRI_slice = (dicom_series.prepped_data[time_frame, z_slice, :, :] == 3).astype(np.uint8)
 
-            # If either structure is missing in too many frames, mark slice for removal
-            if missing_lv_count >= threshold or missing_blood_pool_count >= threshold:
-                slices_to_remove.append(z_slice)
-                break
-    
-    print("Apex")
-    print(slices_to_remove)
-    if 1 in slices_to_remove and 0 not in slices_to_remove:
-        slices_to_remove.append(0)
-        slices_to_remove.sort()
+                # Count frames where LV myocardium segmentation is absent
+                if lv_mask.sum() == 0:
+                    missing_lv_count += 1
+                
+                # Count frames where blood pool segmentation is absent  
+                if blood_pool_mask.sum() == 0:
+                    missing_blood_pool_count += 1
 
-    if 2 in slices_to_remove and (0 not in slices_to_remove or 1 not in slices_to_remove):
-        slices_to_remove.extend([0, 1])
-        slices_to_remove.sort()
+                # If either structure is missing in too many frames, mark slice for removal
+                if missing_lv_count >= threshold or missing_blood_pool_count >= threshold:
+                    slices_to_remove.append(z_slice)
+                    break
 
-    if dicom_series.slices - 2 in slices_to_remove and dicom_series.slices - 1 not in slices_to_remove:
-        slices_to_remove.append(dicom_series.slices - 1)
-        slices_to_remove.sort()
-    
-    print(slices_to_remove)
-    slices_to_remove = extract_preferred_consecutive_group(slices_to_remove,threshold = int(dicom_series.slices/2))
-    print(slices_to_remove)
+        if 1 in slices_to_remove and 0 not in slices_to_remove:
+            slices_to_remove.append(0)
+            slices_to_remove.sort()
+
+        if 2 in slices_to_remove and (0 not in slices_to_remove or 1 not in slices_to_remove):
+            slices_to_remove.extend([0, 1])
+            slices_to_remove.sort()
+
+        if dicom_series.slices - 2 in slices_to_remove and dicom_series.slices - 1 not in slices_to_remove:
+            slices_to_remove.append(dicom_series.slices - 1)
+            slices_to_remove.sort()
+
+        slices_to_remove = extract_preferred_consecutive_group(slices_to_remove,threshold = int(dicom_series.slices/2))
+
 
     # Remove problematic slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, slices_to_remove, axis=1)
