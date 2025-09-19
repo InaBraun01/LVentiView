@@ -748,7 +748,7 @@ def meshes_compute_thickness_map(dicom_exam):
 
 
 def extract_auto_seg_compare_manu_seg(dicom_exam):
-    df = pd.read_csv('/data.lfpn/ibraun/Code/paper_volume_calculation/manual_segmentation.csv', header=None)
+    df = pd.read_csv('manual_segmentation.csv', header=None)
     df[1] = df[1].apply(ast.literal_eval)
     df[0] = df[0].str.strip("'")
 

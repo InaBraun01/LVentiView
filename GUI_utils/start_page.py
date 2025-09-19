@@ -16,8 +16,8 @@ class StartPage(QWidget):
         btn_layout.setSpacing(50)
         main_layout.addLayout(btn_layout)
         btn_layout.addStretch()
-        seg_icon_path = "/data.lfpn/ibraun/Code/lvmeshfitting/segmentation_logo.png"
-        mesh_icon_path = "/data.lfpn/ibraun/Code/lvmeshfitting/mesh_gen_logo.png"
+        seg_icon_path = "segmentation_logo.png"
+        mesh_icon_path = "mesh_gen_logo.png"
         btn_segmentation = IconTextButton(seg_icon_path, "Segmentation", size=180)
         btn_segmentation.clicked.connect(self.on_segmentation)
         btn_layout.addWidget(btn_segmentation)
