@@ -15,38 +15,38 @@ from .mesh_generation import (
     analyze_mesh_volumes_step,
     calculate_segmentation_thickness_step
 )
-from .analysis_step_thread import AnalysisStepThread
+from .segmentation_step_thread import AnalysisStepThread
 from .mesh_fitting_thread import MeshGenerationThread
 
 class MeshGenerationApp(QWidget):
     backRequested = pyqtSignal()
 
-    def __init__(self,folder_manager):
+    def __init__(self, folder_manager):
         super().__init__()
 
         self.folder_manager = folder_manager
         self.resize(900, 900)
 
-         # === Outer layout for the entire app ===
+        # === Outer layout for the entire app ===
         outer_layout = QVBoxLayout(self)
 
         # === Scroll Area setup ===
         scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)  # important for resizing
+        scroll_area.setWidgetResizable(True)  # ensures content resizes properly
         outer_layout.addWidget(scroll_area)
 
-        # === Inner widget that goes inside the scroll area ===
+        # === Inner widget inside the scroll area ===
         scroll_widget = QWidget()
         scroll_area.setWidget(scroll_widget)
 
-        # === Main content layout inside the scroll area ===
-        self.layout = QVBoxLayout(scroll_widget)  # note: self.layout is now on scroll_widget
+        # === Main content layout inside scroll area ===
+        self.layout = QVBoxLayout(scroll_widget)  # all widgets go here
 
-        # Back button top left as a QToolButton with a left arrow
+        # --- Back button ---
         self.back_button = QToolButton()
-        self.back_button.setArrowType(Qt.LeftArrow)  # Left pointing arrow
+        self.back_button.setArrowType(Qt.LeftArrow)  # left-pointing arrow
         self.back_button.setToolTip("Back to Start Page")
-        self.back_button.setFixedSize(30, 30)  # Smaller fixed size
+        self.back_button.setFixedSize(30, 30)
         self.back_button.clicked.connect(self.backRequested.emit)
 
         top_layout = QHBoxLayout()
@@ -54,12 +54,12 @@ class MeshGenerationApp(QWidget):
         top_layout.addStretch()
         self.layout.addLayout(top_layout)
 
-        # Input/output folders
+        # --- Input/output folder selection ---
         self.setup_folder_ui()
 
-        self.param_fields = {}
+        self.param_fields = {}  # store references to all parameter input widgets
 
-        # Only tab widget goes into parameter group!
+        # --- Group box for mesh parameters ---
         self.set_params_group = QGroupBox("Set Parameters")
         self.set_params_group.setCheckable(True)
         self.set_params_group.setChecked(False)
@@ -69,9 +69,9 @@ class MeshGenerationApp(QWidget):
         self.set_params_group.setLayout(group_layout)
         self.set_params_tab_widget = QTabWidget()
         group_layout.addWidget(self.set_params_tab_widget)
-        self.set_params_tab_widget.setVisible(False) # start hidden
+        self.set_params_tab_widget.setVisible(False)  # start hidden
 
-        # Mesh fitting parameters page
+        # --- Mesh fitting parameters tab ---
         fitting_params_widget = QWidget()
         fitting_params_layout = QFormLayout(fitting_params_widget)
 
@@ -82,34 +82,26 @@ class MeshGenerationApp(QWidget):
             ('num_modes', 'Number of Modes', '25'),
         ]
 
+        # Add widgets for each fitting parameter
         for key, label, default in fitting_params:
             if key == 'time_frames_to_fit':
                 input_widget = QComboBox()
-                input_widget.setEditable(True)  # Allow custom input
+                input_widget.setEditable(True)
                 input_widget.addItems(['all'])
-                # Set default value
-                if default in ['all']:
-                    index = input_widget.findText(default)
-                    if index >= 0:
-                        input_widget.setCurrentIndex(index)
-                else:
-                    input_widget.setCurrentText(default)
-                # Add placeholder text to help user understand the format
                 input_widget.setEditText(default)
-                input_widget.lineEdit().setPlaceholderText("Enter 'all or comma-separated positive integers (e.g., 1,2,3 for frames 1,2,3)")
+                input_widget.lineEdit().setPlaceholderText(
+                    "Enter 'all' or comma-separated positive integers (e.g., 1,2,3)")
             else:
                 input_widget = QLineEdit()
                 input_widget.setText(default)
                 if key in ['num_modes', 'training_steps']:
                     input_widget.setValidator(QIntValidator(0, 1000000, self))
-            
             fitting_params_layout.addRow(label + ':', input_widget)
             self.param_fields[key] = input_widget
 
         self.set_params_tab_widget.addTab(fitting_params_widget, "Mesh Fitting Parameters")
 
-
-        # Advanced fitting parameters page
+        # --- Advanced fitting parameters tab ---
         advanced_fitting_params_widget = QWidget()
         advanced_fitting_layout = QFormLayout(advanced_fitting_params_widget)
 
@@ -122,15 +114,14 @@ class MeshGenerationApp(QWidget):
         for key, label, default in advanced_fitting_parms:
             input_widget = QLineEdit()
             input_widget.setText(default)
-            # Fixed the condition - was checking if key equals a list, now checks if key is in the list
-            if key in [ 'cp_frequency','steps_between_fig_saves']:
+            if key in ['cp_frequency', 'steps_between_fig_saves']:
                 input_widget.setValidator(QIntValidator(0, 1000000, self))
             advanced_fitting_layout.addRow(label + ':', input_widget)
             self.param_fields[key] = input_widget
 
         self.set_params_tab_widget.addTab(advanced_fitting_params_widget, "Advanced Fitting Parameters")
 
-        # Shift and Rotation parameters page
+        # --- Shift and rotation parameters tab ---
         shift_rotation_params_widget = QWidget()
         shift_rotation_layout = QFormLayout(shift_rotation_params_widget)
 
@@ -152,124 +143,9 @@ class MeshGenerationApp(QWidget):
 
         self.set_params_tab_widget.addTab(shift_rotation_params_widget, "Regulate Shifts + Rotations")
 
-        #Parameters for weghts in loss function
+        # --- Loss function weight parameters tab ---
         weight_params_widget = QWidget()
         weight_layout = QFormLayout(weight_params_widget)
-
-        weight_params = [
-            ('dice_loss_weight', "Dice loss weight", '5'),
-            ('mode_loss_weight', 'Mode weight', '0.05'),
-            ('global_shift_penalty_weigth', 'Global Shift Penalty', '0.3'),
-            ('slice_shift_penalty_weigth', 'Slice Shift Penalty', '10'),
-            ('rotation_penalty_weigth', 'Rotation Penalty', '1')
-        ]
-
-        for key, label, default in weight_params:
-            input_widget = QLineEdit()
-            input_widget.setText(default)
-            weight_layout.addRow(label + ':', input_widget)
-            self.param_fields[key] = input_widget
-
-        self.set_params_tab_widget.addTab(weight_params_widget, "Loss Function Weights")
-
-        self.volumetric_mesh_checkbox = QCheckBox("Calculate Volumes")
-        self.volumetric_mesh_checkbox.setChecked(True)
-        self.volumetric_mesh_checkbox.stateChanged.connect(self.on_volumetric_mesh_checked)
-        self.layout.addWidget(self.volumetric_mesh_checkbox)
-
-        self.thickness_checkbox = QCheckBox("Calculate Thickness")
-        self.thickness_checkbox.setChecked(True)
-        self.thickness_checkbox.stateChanged.connect(self.on_thickness_checked)
-        self.layout.addWidget(self.thickness_checkbox)
-
-        # --- ALL RESULTS WIDGETS OUTSIDE THE PARAM GROUP ---
-        self.run_button = QPushButton("Run Mesh Generation")
-        self.run_button.clicked.connect(self.run_mesh_generation)
-        self.run_button.setEnabled(False)
-        self.layout.addWidget(self.run_button)
-
-        # Connect to folder manager signals
-        self.folder_manager.inputFolderChanged.connect(self.update_input_label)
-        self.folder_manager.outputFolderChanged.connect(self.update_output_label)
-
-        # Initialize labels with current folder values
-        self.update_input_label(self.folder_manager.get_input_folder())
-        self.update_output_label(self.folder_manager.get_output_folder())
-
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
-        self.layout.addWidget(self.log_output, stretch=1)
-
-        # Add progress bar
-        self.progressBar = QProgressBar()
-        self.layout.addWidget(self.progressBar)
-
-        # Mesh visualization list
-        self.mesh_image_list = QListWidget()
-        self.mesh_image_list.setMaximumHeight(40)
-        self.mesh_image_list.itemChanged.connect(self.on_image_checked)
-        self.label_mesh_image = QLabel("Mesh Visualization:")
-        self.label_mesh_image.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
-        self.layout.addWidget(self.label_mesh_image)
-        self.layout.addWidget(self.mesh_image_list)
-
-        #Text box to print Blood pool and Myocardial dice
-        self.dice_title = QLabel("Fit of Meshes to Segmentation Masks:")
-        self.dice_title.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
-        self.layout.addWidget(self.dice_title)
-        self.dice_box = QPlainTextEdit()
-        self.dice_box.setReadOnly(True)  # Make it non-editable
-        self.dice_box.setMaximumHeight(40)
-        self.layout.addWidget(self.dice_box)
-
-        # Two separate analysis plot lists with labels
-        #For volume calculation
-        self.volumetric_analysis_list = QListWidget()
-        self.volumetric_analysis_list.setMaximumHeight(40)
-        self.volumetric_analysis_list.itemChanged.connect(self.on_image_checked)
-        self.volumetric_analysis_label= QLabel("Blood Pool and Myocardium Volumes:")
-        self.volumetric_analysis_label.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
-        self.layout.addWidget(self.volumetric_analysis_label)
-        self.layout.addWidget(self.volumetric_analysis_list)
-
-        #for thickness calculation
-        self.thickness_analysis_list = QListWidget()
-        self.thickness_analysis_list.setMaximumHeight(200)
-        self.thickness_analysis_list.itemChanged.connect(self.on_image_checked)
-        self.thickness_analysis_label = QLabel("Local Thickness Estimation:")
-        self.thickness_analysis_label.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
-        self.layout.addWidget(self.thickness_analysis_label)
-        self.layout.addWidget(self.thickness_analysis_list)
-
-
-        self.image_display = QLabel("No image selected")
-        self.image_display.setAlignment(Qt.AlignCenter)
-        self.image_display.setMinimumHeight(300)
-        self.layout.addWidget(self.image_display)
-
-        #Text box to print EDV, ESV, SV and EF
-        self.results_title = QLabel("Computed Cardiac Function Parameters:")
-        self.results_title.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
-        self.layout.addWidget(self.results_title)
-        self.results_box = QPlainTextEdit()
-        self.results_box.setReadOnly(True)  # Make it non-editable
-        self.layout.addWidget(self.results_box)
-
-        self.volumetric_mesh_checked = self.volumetric_mesh_checkbox.isChecked()
-        self.thickness_checked = self.thickness_checkbox.isChecked()
-        self.pending_analysis_steps = []
-
-        self.input_path = None
-        self.output_folder = None
-        self.mesh_thread = None
-        self.analysis_step_thread = None
-        self.buttons_created = False
-
-        # Keep track of current analysis step type
-        self.current_analysis_step = None
-        
-        # Set initial visibility based on checkbox states
-        self.update_analysis_widgets_visibility()
 
     def toggle_params_visibility(self, checked):
         self.set_params_tab_widget.setVisible(checked)
