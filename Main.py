@@ -7,51 +7,39 @@ import csv
 import ast
 import time
 import cProfile
+import gc
+import torch
 
 from Python_Code.DicomExam import DicomExam
 from Python_Code.Utilis.analysis_utils import (
     compute_cardiac_parameters,
-    calculate_segmentation_uncertainty,
     analyze_mesh_volumes,
-    extract_auto_seg_compare_manu_seg,
-    compute_thickness_map
+    meshes_compute_thickness_map,
+    seg_masks_compute_thickness_map
 )
 from Python_Code.Segmentation import segment
 from Python_Code.Utilis.load_DicomExam import loadDicomExam
 from Python_Code.Mesh_fitting import fit_mesh
 from Python_Code.Utilis.clean_MRI_utils import estimateValvePlanePosition , estimate_MRI_orientation
 
-local_path    = os.getcwd()
+#Path to directory contain data to segment 
+#data_dir = "ADD PATH TO DIRECTORY HERE"
 
-# data_dir = local_path + '/Data_healthy/'
+#Path to output folder
+#output_folder = "ADD PATH TO DIRECTORY HERE"
+
+#list of datasets to contained in data_dir that you want to segment and fit a mesh to 
+#datasets = ["NAME1", "NAME2", "NAME3", ...] #ADD NAMES OF YOUR DATA SETS
+
+
+
+#Lines for me to test the code
+
 data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Patient_data/Healthy/'
+output_folder='outputs_patient_data/test' 
 
-# data_dir = "/data.lfpn/ibraun/Code/paper_volume_calculation/Human_data"
-output_folder='test/test_ES' 
+datasets = [ 'SCD0003701']
 
-# output_folder = 'outputs_healthy_GUI'
-
-#monkey data sets
-# datasets = ['Baker', 'Blasius', 'Bobo' ,'Borris' , 'Corbinian', 'Gaerry', 'Gandalf', 'Gisbert', 'Jasper', 'Louie',
-# 			'Mae', 'Maike', 'Norman', 'Palmiro', 'Prosper', 'Tibor', 'Ulita', 'Ursetta', 'Welle'] #list of all datasets for which the code should be run
-
-# datasets = ['Welle']
-
-# #heart failure infarct datasets
-# datasets = ['SCD0000101','SCD0000201','SCD0000301','SCD0000401','SCD0000501','SCD0000601', 'SCD0000701','SCD0000801','SCD0000901','SCD0001001','SCD0001101','SCD0001201']
-
-# #heart failure without infarct datasets
-# datasets = ['SCD0001301','SCD0001401','SCD0001501','SCD0001601','SCD0001701','SCD0001801','SCD0001901','SCD0002001','SCD0002101','SCD0002201','SCD0002301','SCD0002401']
-
-# #Lv Hypertrophy datasets
-# datasets = ['SCD0002501','SCD0002601','SCD0002701','SCD0002801','SCD0002901','SCD0003001','SCD0003101','SCD0003201','SCD0003301','SCD0003401','SCD0003501','SCD0003601']
-
-# #Healthy datasets
-# datasets = ['SCD0003701','SCD0003801','SCD0003901','SCD0004001','SCD0004101','SCD0004201','SCD0004301','SCD0004401','SCD0004501']
-
-datasets = ['SCD0003701']
-
-# datasets = ['Patient077']
 # Define valid stages
 valid_stages = {"all", "meshing", "segmentation"}
 
@@ -72,10 +60,12 @@ else:
     stage = "all"
     print("Running Segmentation and Mesh Fitting...")
 
-for dataset_to_use in datasets: 
+for index,dataset_to_use in enumerate(datasets): 
 
     print(f"Processing Data from: {dataset_to_use}")
+
     input_path = os.path.join(data_dir, dataset_to_use)
+
 
     if stage == "all" or stage == "segmentation":
         print("Loading DICOM data...")
@@ -87,37 +77,36 @@ for dataset_to_use in datasets:
         print("Running segmentation...")
         segment(de)
 
-        print("Saving Automatic Segmentation Masks to Available Manual Segmentation Masks...")
-        extract_auto_seg_compare_manu_seg(de)
-
         print("Save Visualization of Segmentation Results ..")
         #Save a visualisation of the full MRI data with the generated segmentation masks
-        de.save_images(prefix='full')
+        de.save_images()
 
         print("Estimating valve plane position...")
         #Estimate the planes lying above the LV base
         estimateValvePlanePosition(de)
 
-        # print("Cleaning data...")
-        # #Clean MRI data based on Segmentations
-        # de.clean_data()
+        print("Estimating landmarks...")
+        #Calculate landmarks
+        de.estimate_landmarks()
+
+        print("Cleaning data...")
+        #Clean MRI data based on Segmentations
+        de.clean_data()
 
         print("Estimate MRI orientation...")
         estimate_MRI_orientation(de)
 
         print("Save Cleaned Visualization of Segmentation Results ..")
         #Save a visualisation of the cleaned MRI data with the generated segmentation masks
-        de.save_images(prefix='cleaned')
-
-        print("Estimating landmarks...")
-        #Calculate landmarks
-        de.estimate_landmarks()
+        de.save_images(prefix='Clean')
     
         print("Analyse segmentation masks...")
+        #compute blood pool volumes, myocardial volumes, ESV, EDV, SV, EF using Simpsons method
         compute_cardiac_parameters(de,'seg')
 
         print("Calculate Local Thickness...")
-        compute_thickness_map(de)
+        #calculate local thickness from segmentation masks
+        seg_masks_compute_thickness_map(de)
 
         print("Saving analysis object...")
         #Save object of type DicomExam as pickel file
@@ -128,8 +117,6 @@ for dataset_to_use in datasets:
         print("Loading Segmentation from (already segmented) DicomExam")
         de = loadDicomExam(input_path,output_folder)
 
-
-
     if stage == "all" or stage == "meshing":
 
         #Remove all meshes previously fitted to the segmentation masks
@@ -138,15 +125,21 @@ for dataset_to_use in datasets:
         start_time = time.time()
         print("Running Mesh Fitting...")
         #Fit 3D Volumetric meshes to the generated Segmentation masks
-        end_dices = fit_mesh(de,training_steps=500, time_frames_to_fit=[6], burn_in_length=0, train_mode='normal',
-		mode_loss_weight = 7.405277111193427e-07, #how strongly to penalise large mode values
-		global_shift_penalty_weigth = 0.3, steps_between_progress_update=10,
-		lr =  0.095, num_cycle = 1, num_modes = 25) #fits a mesh to every time frame. Check the function definition for a list of its arguments
+        df_end_dice = fit_mesh(
+            de,
+            fitting_steps=5,    #number of fitting steps per time frame
+            time_frames_to_fit=[0], #"all" or list of time frames to fit 
+        )
         end_time = time.time()
 
-        print(f"Myocardium Dice: {end_dices[0][0]:.3f}")
-        print(f"Blood Pool Dice: {end_dices[0][1]:.3f}")
+        # Print dice scores and fitting times
+        print(f"Myocardium Dice: {df_end_dice['Myocardium Dice'].mean():.3f}")
+        print(f"Blood Pool Dice: {df_end_dice['Blood pool dice'].mean():.3f}")
         print(f"Fitting took: {end_time - start_time:.3f}s")
+
+        #save fitting time
+        with open(de.folder['base'] +"/fitting_time.csv", "w") as f:
+            f.write(f"{end_time - start_time:.3f}\n")
 
         print("Save Visualization of Generated Meshes ..")
         #Save a visualisation of the sliced mesh overlying the cleaned MRI images
@@ -160,13 +153,17 @@ for dataset_to_use in datasets:
         #Analysis and Plots various cardiac parameters calculated directly from the volumetric mesh
         analyze_mesh_volumes(de) #need to implement plotting
 
-        print("Calculating Segmentation Uncertainty ...")
-        #Calculate uncertainty of generated mesh
-        calculate_segmentation_uncertainty(de,'mesh')
+        print("Calculate Local Thickness...")
+        meshes_compute_thickness_map(de)
 
         print("Saving Analysis Object...")
         #Save object of type DicomExam as pickel file
         de.save()
+
+    del de
+    del df_end_dice  
+    torch.cuda.empty_cache()
+    gc.collect()
 
 
 
