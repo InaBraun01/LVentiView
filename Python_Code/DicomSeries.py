@@ -5,9 +5,7 @@ This module provides a class for handling individual DICOM series within a cardi
 Each series represents a specific imaging sequence (e.g., short-axis, 2-chamber, 4-chamber views).
 """
 
-import sys
 import numpy as np
-import matplotlib.pyplot as plt
 from Python_Code.Utilis.folder_utils import path_leaf
 from Python_Code.Utilis.load_Dicom import dataArrayFromDicom, dataArrayFromNifti
 
@@ -44,8 +42,6 @@ class DicomSeries(object):
 
         if full_path.endswith('nii.gz'):
             print('loading series from NIfTI')
-            # data, pixel_spacing, image_ids, dicom_details, slice_locations, trigger_times, image_positions, is3D, multifile = dataArrayFromNifti(full_path)
-            # self.orientation = [0,1,0,1,0,0]
 
             (data, pixel_spacing, image_ids, dicom_details,
             slice_locations, trigger_times, image_positions,

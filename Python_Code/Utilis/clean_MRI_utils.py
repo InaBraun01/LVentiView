@@ -56,8 +56,6 @@ def clean_slices_base(dicom_series, incomplete_frames, percentage = 0.7):
             if dicom_series.slice_above_valveplane[col, row] == 0:  # 0 indicates above valve plane
                 number_above_base += 1
 
-                print(number_above_base, threshold)
-
             # If this slice is above valve plane in enough time frames, mark for removal
             if number_above_base >= threshold:
                 z_height_remove.append(row)
@@ -78,15 +76,6 @@ def clean_slices_base(dicom_series, incomplete_frames, percentage = 0.7):
           number_z_stacks - 1 not in z_height_remove):
         if (number_z_stacks - 1) >= 0:
             z_height_remove.extend([number_z_stacks - 1])
-
-
-    # Example threshold for closeness in integer space
-    #threshold = 1  # you can set to 0 if you want only exact matches
-
-    # z_height_remove = [
-    #     z for z in z_height_remove
-    #     if all(abs(z - a) > threshold for a in apex_set)
-    # ]
     
     z_height_remove= extract_preferred_consecutive_group(z_height_remove,threshold = int(dicom_series.slices/2))
     # Remove identified slices from all data structures
@@ -227,6 +216,8 @@ def clean_time_frames(dicom_series, slice_threshold = 2,remove_time_steps=None):
 
         slice_threshold: threshold of missing slices in order for the time frame 
                         to be removed (default = 2)
+        
+        remove_time_steps: (opionlat) list of time steps to remove
     
     Returns:
         list: Indices of time frames that were removed
@@ -285,33 +276,6 @@ def extract_preferred_consecutive_group(lst, threshold):
 
     return filled
 
-    # # Step 2: Extract consecutive groups from filled list
-    # groups = []
-    # current = [filled[0]]
-
-    # for i in range(1, len(filled)):
-    #     if abs(filled[i] - filled[i - 1]) == 1:
-    #         current.append(filled[i])
-    #     else:
-    #         if len(current) >= 2:
-    #             groups.append(current)
-    #         current = [filled[i]]
-    
-    # if len(current) >= 2:
-    #     groups.append(current)
-
-    # if not groups:
-    #     return []
-
-    # first_group = groups[0]
-    # if min(first_group) < threshold:
-    #     # Keep the longest (or last-longest) group
-    #     max_len = max(len(g) for g in groups)
-    #     longest_groups = [g for g in groups if len(g) == max_len]
-    #     return longest_groups[-1]
-    # else:
-    #     return first_group
-
 def clean_slices_apex(dicom_series, percentage = 0.2, remove_z_slices = None):
     """
     Remove z-slices at the apex that lack sufficient LV or blood pool segmentation.
@@ -333,6 +297,8 @@ def clean_slices_apex(dicom_series, percentage = 0.2, remove_z_slices = None):
 
         percentage: threshold for number of missing segmentation in order for z slice 
                     to be removed (default 0.2 = 20%)
+        
+        remove_z_slices: (opionlat) list of z slices to remove
     
     Returns:
         list: Indices of z-slices that were removed
@@ -378,6 +344,7 @@ def clean_slices_apex(dicom_series, percentage = 0.2, remove_z_slices = None):
                     slices_to_remove.append(z_slice)
                     break
 
+        #Collect potentially missed border slices
         if 1 in slices_to_remove and 0 not in slices_to_remove:
             slices_to_remove.append(0)
             slices_to_remove.sort()
@@ -390,6 +357,7 @@ def clean_slices_apex(dicom_series, percentage = 0.2, remove_z_slices = None):
             slices_to_remove.append(dicom_series.slices - 1)
             slices_to_remove.sort()
 
+        #make sure the extracted slices form a consecutive list
         slices_to_remove = extract_preferred_consecutive_group(slices_to_remove,threshold = int(dicom_series.slices/2))
 
 
@@ -399,14 +367,13 @@ def clean_slices_apex(dicom_series, percentage = 0.2, remove_z_slices = None):
     dicom_series.cleaned_data = np.delete(dicom_series.cleaned_data, slices_to_remove, axis=1)
     dicom_series.slices = dicom_series.slices - len(slices_to_remove)
 
-
     dicom_series.image_positions = [item for i, item in enumerate(dicom_series.image_positions) if i not in slices_to_remove]
     dicom_series.slice_locations = [item for i, item in enumerate(dicom_series.slice_locations) if i not in slices_to_remove]
     
     return slices_to_remove
 
 
-def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
+def postprocess_cleaned_data(dicom_exam) -> None:
     """
     Post-process cleaned DICOM data for each series:
     - Segments the cleaned data at the required resolution.
@@ -417,13 +384,11 @@ def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
 
     Parameters:
     -----------
-    dicom_series : list 
-        A list of DICOM series objects, each expected to have attributes like
+    dicom_exam : Object containing a list of DICOM series objects, each expected to have attributes like
         `cleaned_data`, `pixel_spacing`, `view`, `image_positions`, and `orientation`.
     """
 
     for series_idx, series in enumerate(dicom_exam.series):
-        print(series.cleaned_data.shape)
 
         is_sax = series.view in ['SAX', 'unknown']
         crop_size = dicom_exam.sz
@@ -493,11 +458,33 @@ def postprocess_cleaned_data(dicom_exam, dicom_series: list) -> None:
 
         # Optional shape correction for short-axis view
         if is_sax:
-            print("  Applying shape correction for SAX view")
+            print("Applying shape correction for SAX view")
             series.prepped_seg = simple_shape_correction(series.prepped_seg)
 
 
 def estimate_MRI_orientation(dicom_exam):
+    """
+    Estimate cardiac MRI orientation (base-to-apex vs apex-to-base) by analyzing myocardial diameter changes.
+    
+    This function determines whether the cardiac MRI stack is oriented with the base at the top
+    ("base_top") or apex at the top ("apex_top") by analyzing the variation in myocardial 
+    diameter across slices. The cardiac base has a larger diameter than the apex,
+    so comparing average diameters between the first and second half of slices reveals the orientation.
+    
+    Algorithm:
+    1. For each slice, extract myocardial mask (label = 2)
+    2. Calculate center of mass for the myocardial region
+    3. Measure diameters in multiple directions (horizontal, vertical, diagonal)
+    4. Compare average diameters between first and second half of slice stack
+    5. Assign orientation based on which half has larger average diameter
+    
+    Args:
+        dicom_exam: DICOM examination object containing segmentation data.
+                   Must have series[0].prepped_seg attribute with shape (time, slices, H, W).
+                   The MRI_orientation attribute will be updated with the result.
+
+    """
+    #collect diameters 
     slice_diameter = []
     for i in range(dicom_exam.series[0].prepped_seg.shape[1]):
         slice = dicom_exam.series[0].prepped_seg[0,i,:,:]
@@ -529,12 +516,13 @@ def estimate_MRI_orientation(dicom_exam):
         
         slice_diameter.append(np.mean(diameters))
     
-
+    #compare diameters in first and second half of the series
     n = dicom_exam.series[0].prepped_seg.shape[1]
     mid = n // 2
     start_avg = sum(slice_diameter[:mid]) / mid
     end_avg = sum(slice_diameter[mid:]) / (n - mid)
 
+    #assign orientation to MRI data
     if start_avg > end_avg:
         dicom_exam.MRI_orientation = "base_top"
     elif start_avg < end_avg:

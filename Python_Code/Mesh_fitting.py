@@ -5,11 +5,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 import torch.optim as optim
-import imageio
-import meshio
-import csv
-from copy import deepcopy
-from scipy.spatial.transform import Rotation
+import pandas as pd
 
 import matplotlib.pyplot as plt
 
@@ -25,17 +21,16 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def fit_mesh(dicom_exam, 
              time_frames_to_fit='all',
-             burn_in_length=0,
              num_fits=1,
-             num_cycle=5,
-             lr=0.003,
+             lr=0.095,
              num_modes=25,
-             training_steps=150,
+             fitting_steps=150,
              allow_global_shift_xy=True,
              allow_global_shift_z=True,
              allow_slice_shift=True,
              allow_rotations=True,
-             mode_loss_weight=0.05,
+             dice_loss_weight = 5,
+             mode_loss_weight=7.4e-07,
              global_shift_penalty_weigth=0.3,
              slice_shift_penalty_weigth=10,
              rotation_penalty_weigth=1,
@@ -44,7 +39,7 @@ def fit_mesh(dicom_exam,
              series_to_exclude=None,
              cp_frequency=50,
              mesh_model_dir='ShapeModel',
-             train_mode='else',
+             train_mode='normal',
              random_starting_mesh=False,
              show_progress=True,
              progress_callback=None):
@@ -54,13 +49,11 @@ def fit_mesh(dicom_exam,
     Args:
         dicom_exam: The DICOM exam object containing image and series information.
         time_frames_to_fit: Time frames to fit ('all' or specific list).
-        burn_in_length: Number of frames to skip before fitting.
         num_fits: Number of full fitting repetitions.
-        num_cycle: Number of cardiac cycles to consider.
         lr: Learning rate.
         num_modes: Number of PCA modes to use.
         initial_training_steps: Initial training steps for mesh fitting.
-        training_steps: Training steps per time frame.
+        fitting_steps: Fitting steps per time frame.
         allow_global_shift_xy, allow_global_shift_z, allow_slice_shift, allow_rotations: Flags to control transform degrees of freedom.
         mode_loss_weight, global_shift_penalty_weigth, slice_shift_penalty_weigth, rotation_penalty_weigth: Loss weights.
         steps_between_progress_update, steps_between_fig_saves: Logging and visualization intervals.
@@ -82,8 +75,14 @@ def fit_mesh(dicom_exam,
     if len(dicom_exam.series) != 1:
         print(f"Mesh fitting only works with one series. Found {len(dicom_exam.series)}.")
 
-
+    
     dicom_exam.series_to_exclude = [s.lower() for s in series_to_exclude]
+
+    #collect time points for which to fit meshes
+    if time_frames_to_fit == "all":
+         time_frames_to_fit = [i for i in range(dicom_exam.time_frames)]
+    
+    dicom_exam.time_frames_to_fit = time_frames_to_fit
 
     # Setup paths and parameters
     use_bp_channel = True
@@ -97,6 +96,7 @@ def fit_mesh(dicom_exam,
 
     # Prepare voxelized mean mesh for input
     mean_arr_batch, mesh_origin = ut.prepare_voxelized_mean_array(mesh_1, sz, use_bp_channel, device)
+    mean_arr_batch =  [mean_arr_batch for i in range(len(time_frames_to_fit))]
     
     #normalize starting cp
     starting_cp = (exterioror_mesh_points - mesh_origin) / sz
@@ -110,7 +110,8 @@ def fit_mesh(dicom_exam,
                         allow_slice_shift=allow_slice_shift,
                         allow_rotations=allow_rotations,
                         series_to_exclude=series_to_exclude)
-
+    
+    #initialize model
     (pcaD, warp_and_slice_model, learned_inputs,
         li_model) = makeFullPPModelFromDicom(sz, num_modes, starting_cp, dicom_exam, mode_bounds, mode_means, PHI3, -mesh_origin, mesh_origin,
                                              allow_global_shift_xy=allow_global_shift_xy,
@@ -119,7 +120,7 @@ def fit_mesh(dicom_exam,
                                              allow_rotations=allow_rotations,
                                              series_to_exclude=series_to_exclude)
 
-    eli = ut.evalLearnedInputs(learned_inputs, mode_bounds, mode_means, mesh_1, PHI)
+    eli = ut.evalLearnedInputs(learned_inputs, mode_bounds, mode_means, mesh_1, PHI,dicom_exam)
 
     if random_starting_mesh:
         ut.init_random_start_mesh(learned_inputs, device)
@@ -127,10 +128,6 @@ def fit_mesh(dicom_exam,
     # Align initial mesh with DICOM coordinate system
     ut.set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se)
 
-    # Determine which time frames to fit
-    tf_to_fit = ut.get_time_frames_to_fit(dicom_exam, time_frames_to_fit, burn_in_length, num_cycle)
-
-    end_dices = []
     opt_method = optim.Adam
 
     # Run fitting for each repetition
@@ -139,68 +136,59 @@ def fit_mesh(dicom_exam,
         # Reset model state if re-fitting
         if rep != 0:
             ut.resetModel(learned_inputs, eli, use_bp_channel, sz, -mesh_origin, ones_input, pcaD, warp_and_slice_model)
+        
+        # Load segmentation mask and image for current time frame
+        tensor_labels = ut.getTensorLabelsAndInputImage(dicom_exam)
 
-        for idx, time_frame in enumerate(tf_to_fit):
+        # Initialize optimizer
+        optimizer = optim.Adam(li_model.parameters(), lr=lr)
 
-            #ut.resetModel(learned_inputs, eli, use_bp_channel, sz, -mesh_origin, ones_input, pcaD, warp_and_slice_model)
+        print("Start fitting")
+        # Run training loop
+        outputs = train_fit_loop(
+            dicom_exam,
+            fitting_steps,
+            learned_inputs,
+            opt_method,
+            optimizer,
+            lr,
+            li_model,
+            mean_arr_batch,
+            tensor_labels,
+            dice_loss_weight,
+            mode_loss_weight,
+            global_shift_penalty_weigth,
+            slice_shift_penalty_weigth,
+            rotation_penalty_weigth,
+            se,
+            eli,
+            pcaD,
+            warp_and_slice_model,
+            train_mode,
+            steps_between_fig_saves,
+            steps_between_progress_update,
+            -mesh_origin,
+            progress_callback,
+            myo_weight=1,
+            bp_weight=500,
+            ts3=(fitting_steps / 3),
+            show_progress=show_progress
+        )
 
-            message = f"Fitting time-frame {time_frame} ({idx+1}/{len(tf_to_fit)})"
-            if progress_callback:
-                progress_callback(idx + 1, len(tf_to_fit))
-
-            print(message)
+        # Save outputs and Dice score
+        with torch.no_grad():
+            myo_end_dice, bp_end_dice = ut.save_results_post_training(
+                dicom_exam, outputs, eli,se, sz, use_bp_channel, 
+                              -mesh_origin, learned_inputs, tensor_labels)
             
-            # Load segmentation mask and image for current time frame
-            tensor_labels = ut.getTensorLabelsAndInputImage(dicom_exam, time_frame)
+            # Create a DataFrame
+            df_end_dice = pd.DataFrame({'Myocardium Dice': myo_end_dice, 'Blood pool dice': bp_end_dice})
+            fname = os.path.join(dicom_exam.folder['base'], 'end_dice.csv')
+            # Save to CSV
+            df_end_dice.to_csv(fname, index=False)
 
-            # Initialize optimizer
-            optimizer = optim.Adam(li_model.parameters(), lr=lr)
-
-            # Run training loop
-            outputs = train_fit_loop(
-                dicom_exam,
-                training_steps,
-                learned_inputs,
-                opt_method,
-                optimizer,
-                lr,
-                li_model,
-                mean_arr_batch,
-                tensor_labels,
-                mode_loss_weight,
-                global_shift_penalty_weigth,
-                slice_shift_penalty_weigth,
-                rotation_penalty_weigth,
-                se,
-                eli,
-                pcaD,
-                warp_and_slice_model,
-                train_mode,
-                steps_between_fig_saves,
-                steps_between_progress_update,
-                -mesh_origin,
-                myo_weight=1,
-                bp_weight=500,
-                ts3=(training_steps / 3),
-                show_progress=show_progress
-            )
-
-            # Save outputs and Dice score
-            with torch.no_grad():
-                end_dice = ut.save_results_post_training(
-                    dicom_exam, outputs, time_frame, eli, se, sz, use_bp_channel,
-                    -mesh_origin, learned_inputs, tensor_labels)
-                end_dices.append(end_dice)
 
     # Final processing: mask generation for fitted meshes
     prepMeshMasks(dicom_exam)
 
-    fname = os.path.join(dicom_exam.folder['base'], 'end_dice.csv')
-    np.savetxt(fname, end_dices, delimiter=",", fmt="%.4f")
-
-    return end_dices
-
-
-
-
-    
+    return df_end_dice

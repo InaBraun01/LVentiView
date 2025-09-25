@@ -1,5 +1,4 @@
 import vtk
-import numpy as np
 
 def load_vtk_unstructured_grid(filename):
     """

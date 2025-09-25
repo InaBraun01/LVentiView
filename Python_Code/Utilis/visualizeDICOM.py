@@ -172,19 +172,6 @@ def prepMeshMasks(dicom_exam):
             elif num_fitted_meshes == 1:
                 # Single mesh: use directly
                 mesh_data = dicom_exam.fitted_meshes[t]['rendered_and_sliced'][0]
-                # print(mesh_data.shape)
-                # fig, axes = plt.subplots(nrows=6, ncols=2, figsize=(5, 15))  # 6 items, 2 channels each
-
-                # for i in range(6):
-                #     for j in range(2):
-                #         ax = axes[i, j]
-                #         ax.imshow(mesh_data[i, :, :, j], cmap='gray')
-                #         ax.axis('off')
-                #         ax.set_title(f"Item {i}, Channel {j}")
-
-                # plt.tight_layout()
-                # plt.savefig("mesh_data.png")
-                # sys.exit()
                 seg_means.append(mesh_data[sind:eind][None])
                 seg_stds = None
                 

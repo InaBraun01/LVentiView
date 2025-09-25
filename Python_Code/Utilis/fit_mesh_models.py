@@ -1,4 +1,4 @@
-import sys
+
 import csv
 import torch
 import torch.nn as nn
@@ -76,19 +76,16 @@ class SliceExtractor(torch.nn.Module):
 
         # Stack and shape: (1, N_points_total, 3) where N_points_total = num_slices * slice_height * slice_width
         self.grid = np.concatenate(slices)[None]
+        
+        # Center the grid
+        self.grid = (self.grid - volume_origin)
+
+        # Normalize grid so that the values lie between -1 and 1
+        self.grid = 2 * (self.grid / (self.vol_shape)) - 1
+        self.grid = torch.Tensor(self.grid).to(device)
 
         # Create an orientation (local coordinate system) for each slice
         self.coordinate_system = torch.Tensor(makeSliceCoordinateSystems(dicom_exam)).to(device)
-        
-        # Normalize grid to be centered and isotropic in DICOM space
-        center = dicom_exam.center
-
-        # self.grid = (self.grid - center) / dicom_exam.sz
-
-        self.grid = (self.grid - volume_origin)
-
-        self.grid = 2 * (self.grid / (self.vol_shape)) - 1
-        self.grid = torch.Tensor(self.grid).to(device)
 
     def forward(self, args):
         """
@@ -141,7 +138,7 @@ class SliceExtractor(torch.nn.Module):
             # Reshape so that each slice can have its own offset
             batched_grid = batched_grid.view(1, self.num_slices, -1, 3)
             # Offset each slice's grid along its own primary axes
-            batched_grid += torch.bmm(per_slice_offsets[0,:,None], rotated_coords)[None, :]
+            batched_grid += torch.bmm(per_slice_offsets[0,:,None], rotated_coords)[None, :,:, :]
             # Collapse back to original grid shape
             batched_grid = batched_grid.view(1, -1, 3)
 
@@ -186,7 +183,7 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         """
         super().__init__()
         self.vol_shape = input_volume_shape
-        self.control_points = torch.Tensor(control_points).to(device)
+        self.control_points = torch.Tensor(np.array(control_points)).to(device)
         self.allow_shifts = allow_global_shift_xy or allow_global_shift_z
         self.allow_global_shift_xy = allow_global_shift_xy
         self.allow_global_shift_z = allow_global_shift_z
@@ -201,13 +198,11 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         for s in dicom_exam:
             if s.name not in series_to_exclude:
                 slices.extend(s.XYZs) # Each s.XYZs is an array of world coordinates per slices
-
                 # Concatenate all slice coordinates into one big array
                 all_xyz_coords = np.concatenate(s.XYZs, axis=0)  # Shape: (total_voxels, 3)
 
                 # Compute the minimum coordinate along each axis (x, y, z)
                 volume_origin = np.min(all_xyz_coords, axis=0)
-
 
         self.num_slices = len(slices)
         self.grid = np.concatenate(slices)[None]
@@ -216,7 +211,6 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         self.grid = 2 * (self.grid / (self.vol_shape)) - 1
 
         self.grid = torch.Tensor(self.grid).to(device)
-
         # Create an orientation (local coordinate system) for each slice
         self.coordinate_system = torch.Tensor(makeSliceCoordinateSystems(dicom_exam)).to(device)
 
@@ -233,17 +227,16 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         Returns:
             torch.Tensor: Output slices after spline-based warping and resampling from the volume.
         """
-        warped_control_points, vol, global_offsets, per_slice_offsets, global_rotations = args
+        warped_control_points, vol, global_offsets, per_slice_offsets, global_rotations,time_step = args
 
         # Repeat static control grid and control points to match batch size
         # warped_control_points.shape[0] = batch size
         batched_grid = self.grid.repeat(warped_control_points.shape[0], 1, 1)
-        batched_control_points = self.control_points.repeat(warped_control_points.shape[0], 1, 1)
+        batched_control_points = self.control_points[time_step].repeat(warped_control_points.shape[0], 1, 1)
 
         # --- Global Rotation ---
         # If rotation is allowed, use global rotations + initial alignment;
         # otherwise set rotation weight to zero, disabling it.
-
         r_weight = 1 if self.allow_rotations else 0
         R = rotation_tensor(
             global_rotations[..., :1] * r_weight + self.initial_alignment_rotation[0],  # yaw
@@ -284,7 +277,7 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
 
             # Flatten back to shape [1, N, 3] for interpolation
             batched_grid = batched_grid.view(1, -1, 3)
-
+        
 
         # --- Spline Interpolation ---
         #Interpolates how each point in batched_grid is defomed based on control points using B-spline
@@ -301,29 +294,12 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
         # Rearrange dimensions to [B, D, H, W, 3] for grid_sample
         interpolated_sample_locations = interpolated_sample_locations.permute(0, 2, 3, 1, 4)
 
-        # Flatten all dimensions except the last one (which should be the 3D coordinates)
-        flat_coords = interpolated_sample_locations.reshape(-1, 3)
-
-        # Compute min and max per axis (X, Y, Z)
-        min_vals = flat_coords.min(dim=0).values
-        max_vals = flat_coords.max(dim=0).values
-
-        z_min = min_vals[0]
-        z_max = max_vals[0]
-
-        # File to append to
-        csv_file = "z_bounds_log.csv"
-
-        # Append mode
-        with open(csv_file, mode='a', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow([z_min.item(), z_max.item()])  # Just Z bounds
-
         # --- Sample the Volume ---
         # you sample the original volume (vol) at the undeformed positions that correspond to the deformed voxel locations.
         # Thus, it tells you for each voxel in the deformed location wether it was 
         # inside or outside the original segmentation mask.
         res = F.grid_sample(vol, interpolated_sample_locations, align_corners=True, mode='bilinear')
+    
         return res
 
 
@@ -332,20 +308,20 @@ class GivenPointSliceSamplingSplineWarpSSM(torch.nn.Module):
 class LearnableInputPPModel(torch.nn.Module):
     """
     End-to-end model that uses a set of learnable input parameters
-    to predict mesh modes and transformation parameters. 
+    to predict mesh modes and transformation parameters.
     Useful for direct optimization of parameters for a single image/subject.
     """
-    def __init__(self, learned_inputs, pcaD, warp_and_slice_model):
+    def __init__(self, learned_inputs, pcaD, warp_and_slice_model, dicom_exam):
         super().__init__()
-        self.learned_inputs = learned_inputs                 # Network that outputs parameters from a constant input
-        self.pcaD = pcaD                                     # PCA decoder to map modes to mesh control points
-        self.warp_and_slice_model = warp_and_slice_model     # Warping and slicing module (takes mesh and outputs slices)
-        self.num_modes = learned_inputs.num_modes            # Number of PCA modes
+        self.learned_inputs = learned_inputs # Network that outputs parameters from a constant input
+        self.pcaD = pcaD # PCA decoder to map modes to mesh control points
+        self.warp_and_slice_model = warp_and_slice_model # Warping and slicing module (takes mesh and outputs slices)
+        self.num_modes = learned_inputs.num_modes # Number of PCA modes
+        self.dicom_exam = dicom_exam
 
     def forward(self, args):
         """
         Forward method to predict mesh, perform slicing, and return all intermediate parameters.
-        
         Args:
             args (tuple): (voxelized_mean_mesh, ones_input[, temp])
                 voxelized_mean_mesh: Mean/template mesh as a 3D volume (for grid sampling)
@@ -356,25 +332,56 @@ class LearnableInputPPModel(torch.nn.Module):
         """
         # Unpack arguments and handle optional temp
         voxelized_mean_mesh, ones_input = args
-
+        
         # Use the learnableInputs module to get all mesh and transformation parameters
         modes_output, volume_shift, x_shifts, y_shifts, global_rotations = self.learned_inputs(ones_input)
         
-        # Concatenate per-slice shift parameters to form a [N, num_slices, 3] offset tensor
-        # Here, the last dimension: [x_shift, y_shift, z_shift=0]
-        slice_shifts = torch.cat([x_shifts, y_shifts, y_shifts*0], dim=-1)
-
-        # Decode the low-dimensional modes into a full set of mesh control points
-        predicted_cp = self.pcaD(modes_output)
+        # Reshape modes output to separate time steps: [batch, modes, time_steps]
+        modes_output_reshape = modes_output.view(1, self.num_modes, self.learned_inputs.num_time_steps)
         
-        # Apply the warping and slicing model to get predicted 2D slices
-        predicted_slices = self.warp_and_slice_model([
-            predicted_cp, voxelized_mean_mesh, volume_shift, slice_shifts, global_rotations])
-
+        # Get number of time steps for temporal loop
+        T = self.learned_inputs.num_time_steps
+        
+        # Extract slice shift parameters for all slices
+        x_shift_all = x_shifts[0] # shape: [num_slices, 1, T]
+        y_shift_all = y_shifts[0]
+        
+        # Create zero z-shifts (no movement in z-direction)
+        zero = torch.zeros_like(y_shift_all)
+        
+        # Combine x, y, z shifts into single tensor: [num_slices, 3, T]
+        slice_shifts_all = torch.cat([x_shift_all, y_shift_all, zero], dim=1) # [num_slices, 3, T]
+        
+        # Initialize lists to store outputs for each time step
+        predicted_cps = []
+        slice_shifts = []
+        predicted_slices = []
+        
+        # Process each time step individually
+        for t in range(T):
+            # Get slice shifts for current time step and add batch dimension
+            shift = slice_shifts_all[:, :, t].unsqueeze(0)
+            
+            # Convert PCA modes to control points for current time step
+            cp = self.pcaD(modes_output_reshape[:, :, t])
+            
+            # Generate 2D slices using warping and slicing model
+            slice_ = self.warp_and_slice_model([
+                cp,                                    # Control points defining mesh shape
+                voxelized_mean_mesh[t][:1],           # Mean mesh volume for current time
+                volume_shift[:, :, :, t],             # 3D volume translation
+                shift,                                # 2D slice-specific shifts
+                global_rotations[:, :, :, t],         # Global rotation matrices
+                t,                                    # Current time step index
+            ])
+            
+            # Store outputs for current time step
+            predicted_cps.append(cp)
+            slice_shifts.append(shift)
+            predicted_slices.append(slice_)
         
         # Return all outputs for further loss computation, analysis, or optimization
-        return predicted_slices, modes_output, volume_shift, global_rotations, predicted_cp, slice_shifts
-
+        return predicted_slices, modes_output_reshape, volume_shift, global_rotations, predicted_cps, slice_shifts
 
 class PCADecoder(torch.nn.Module):
     """
@@ -429,16 +436,17 @@ class learnableInputs(torch.nn.Module):
     from a constant input vector ("dummy" input).
     Allows fitting parameters directly via gradient descent for a specific subject/image.
     """
-    def __init__(self, num_modes=12, num_slices=10):
+    def __init__(self, num_time_steps,num_modes=12, num_slices=10):
         super().__init__()
         # Each layer projects a 1-vector to the desired number of variables
-        self.modes_output_layer      = nn.Linear(1, num_modes)
-        self.volume_shift_layer      = nn.Linear(1, 3)
-        self.x_shift_layer           = nn.Linear(1, num_slices)
-        self.y_shift_layer           = nn.Linear(1, num_slices)
-        self.volume_rotations_layer  = nn.Linear(1, 3)
+        self.modes_output_layer      = nn.Linear(1, num_modes*num_time_steps)
+        self.volume_shift_layer      = nn.Linear(1, 3*num_time_steps)
+        self.x_shift_layer           = nn.Linear(1, num_slices*num_time_steps)
+        self.y_shift_layer           = nn.Linear(1, num_slices*num_time_steps)
+        self.volume_rotations_layer  = nn.Linear(1, 3*num_time_steps)
         self.num_slices = num_slices
         self.num_modes = num_modes
+        self.num_time_steps = num_time_steps
 
     def forward(self, x):
         """
@@ -452,13 +460,13 @@ class learnableInputs(torch.nn.Module):
                 - y_shifts:     [batch_size, num_slices, 1]
                 - volume_rotations: [batch_size, 1, 3]
         """
-        batch_size = x.shape[0]
+        batch_size = x.shape[0] #generally the batchsize I use is 1
         # Project 1-vector to each parameter type, then reshape for correct broadcasting
-        modes_output     = self.modes_output_layer(x)                               # Shape: [B, num_modes]
-        volume_shift     = self.volume_shift_layer(x).view(batch_size, 1, 3)        # Shape: [B, 1, 3]
-        x_shifts         = self.x_shift_layer(x).view(batch_size, self.num_slices, 1)
-        y_shifts         = self.y_shift_layer(x).view(batch_size, self.num_slices, 1)
-        volume_rotations = self.volume_rotations_layer(x).view(batch_size, 1, 3)    # [B, 1, 3]
+        modes_output     = self.modes_output_layer(x)                               # Shape: [B, num_modes*num_time_steps]
+        volume_shift     = self.volume_shift_layer(x).view(batch_size, 1, 3,self.num_time_steps)        # Shape: [B, 1, 3*num_time_steps]
+        x_shifts         = self.x_shift_layer(x).view(batch_size, self.num_slices,1 ,self.num_time_steps) # Shape: [B, 1, num_slices*num_time_steps]
+        y_shifts         = self.y_shift_layer(x).view(batch_size, self.num_slices,1 ,self.num_time_steps) # Shape: [B, 1, num_slices*num_time_steps]
+        volume_rotations = self.volume_rotations_layer(x).view(batch_size, 1, 3, self.num_time_steps)    # Shape: [B, 1, 3*num_time_steps]
         return (modes_output, volume_shift, x_shifts, y_shifts, volume_rotations)
     
 
@@ -477,8 +485,11 @@ def makeFullPPModelFromDicom(
     Returns:
         Tuple of (pcaD, warp_and_slice_model, learned_inputs, li_model)
     """
+
+    starting_cps = [starting_cp[None] for i in range(len(dicom_exam.time_frames_to_fit))]
+
     warp_and_slice_model = GivenPointSliceSamplingSplineWarpSSM(
-        (sz,sz,sz), starting_cp[None], dicom_exam,
+        (sz,sz,sz), starting_cps, dicom_exam,
         allow_global_shift_xy=allow_global_shift_xy,
         allow_global_shift_z=allow_global_shift_z,
         allow_slice_shift=allow_slice_shift,
@@ -499,14 +510,14 @@ def makeFullPPModelFromDicom(
     pcaD.apply(make_not_trainable)
     pcaD.to(device)
 
-    learned_inputs = learnableInputs(num_modes=num_modes, num_slices=num_slices)
+    learned_inputs = learnableInputs(num_time_steps= len(dicom_exam.time_frames_to_fit), num_modes=num_modes, num_slices=num_slices)
     #initialize weights and biases with 0
     with torch.no_grad():
         for m in [learned_inputs.modes_output_layer, learned_inputs.volume_shift_layer, learned_inputs.x_shift_layer, learned_inputs.y_shift_layer, learned_inputs.volume_rotations_layer]:
             m.weight.fill_(0.)
             m.bias.fill_(0.)
 
-    li_model = LearnableInputPPModel(learned_inputs, pcaD, warp_and_slice_model,)
+    li_model = LearnableInputPPModel(learned_inputs, pcaD, warp_and_slice_model,dicom_exam)
     li_model.to(device)
 
     return pcaD, warp_and_slice_model, learned_inputs, li_model

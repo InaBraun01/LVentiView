@@ -13,6 +13,7 @@ Dependencies: PyVista, PyTorch, SciPy, NumPy, MeshIO
 
 import os
 import sys
+from copy import deepcopy
 import csv
 import numpy as np
 import pyvista as pv
@@ -50,13 +51,11 @@ def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
         - Uses full-scaled model for sz >= 96 (typically for human studies)
     """
     # Load the mean/average mesh model
-    if sz < 80:
+    if sz < 50:
         # Use half-scaled model for smaller left ventricles (e.g., monkey studies)
         mean_mesh_file = os.path.join(model_dir, 'Mean/LV_mean_half_scaled.vtk')
-        print("Monkey")
     else:
         # Use full-scaled model for larger left ventricles (e.g., human studies)
-        print("Human")
         mean_mesh_file = os.path.join(model_dir, 'Mean/LV_mean_scaled.vtk')
 
 
@@ -95,9 +94,6 @@ def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
     # Calculate mean mode coefficients
     mean_modes = np.dot(meshio.read(mean_mesh_file).points.reshape((-1,), order='F'), np.array(PHI))
 
-    # # Transform control points to normalized coordinates [0,1]
-    # starting_cp = (mesh_1.points[exterior_points_index] - mesh_origin) / sz
-
     # Define normalized mesh coordinate system axes
     mesh_vpc = np.array([0.9, 0., 0.])  # Ventricular-pulmonary commissure
     mesh_sax_normal = np.array([1., 0., 0.])  # Short-axis normal vector
@@ -107,7 +103,60 @@ def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
     return (mesh_1, mesh_1.points[exterior_points_index], PHI3, PHI, mode_bounds, mean_modes, mesh_axes)
 
 
-def voxelizeUniform(mesh, sz, gridsize=None, bp_channel=False):
+
+def meshio_tetra_to_unstructured_grid(mesh):
+    """
+    Convert a meshio mesh with tetrahedral cells and associated data to a PyVista UnstructuredGrid.
+    """
+    # Check if the mesh contains tetrahedral cells - required for this conversion
+    if "tetra" not in mesh.cells_dict:
+        raise ValueError("Mesh must contain tetrahedral cells (type: 'tetra').")
+    
+    # Extract mesh points (vertices) and ensure proper data type for PyVista
+    points = np.array(mesh.points, dtype=np.float32) # ensure float32 or float64
+    
+    # Extract tetrahedral cell connectivity data as integer array
+    tets = np.array(mesh.cells_dict["tetra"], dtype=np.int64)
+    
+    # Get the total number of tetrahedral cells in the mesh
+    n_cells = tets.shape[0]
+    
+    # Flatten the cell array and prepend with number of nodes per cell (always 4 for tets)
+    # PyVista format requires: [n_nodes, node1, node2, node3, node4, n_nodes, node1, ...]
+    cells = np.hstack([np.full((n_cells, 1), 4), tets]).flatten()
+    
+    # Create cell type array - all cells are tetrahedra (VTK cell type 10)
+    celltypes = np.full(n_cells, pv.CellType.TETRA, dtype=np.uint8)
+    
+    # Create PyVista UnstructuredGrid from cells, cell types, and points
+    grid = pv.UnstructuredGrid(cells, celltypes, points)
+    
+    # Optionally: add point data if available
+    # Point data is associated with mesh vertices
+    if mesh.point_data:
+        # Transfer all point data arrays to the PyVista grid
+        for key, val in mesh.point_data.items():
+            grid.point_data[key] = val
+    
+    # Transfer cell data if available
+    # Cell data is associated with mesh elements (tetrahedra)
+    if mesh.cell_data:
+        for key, val in mesh.cell_data.items():
+            # mesh.cell_data[key] could be a list if multiple cell types
+            # Handle case where cell data is stored as list (multiple cell types)
+            if isinstance(val, list):
+                # Select the one for tetrahedra
+                # Find index of tetrahedral cells in the cells list
+                tet_data = val[mesh.cells.index(("tetra", tets))]
+                grid.cell_data[key] = tet_data
+            else:
+                # Direct assignment for single cell type data
+                grid.cell_data[key] = val
+    
+    # Return the fully populated PyVista UnstructuredGrid
+    return grid
+
+def voxelizeUniform(mesh, z_res, gridsize=None, bp_channel=False):
     """
     Convert a 3D mesh to a voxelized representation on a uniform grid.
     
@@ -123,25 +172,16 @@ def voxelizeUniform(mesh, sz, gridsize=None, bp_channel=False):
                                If bp_channel=True, returns (myocardium, blood_pool) tuple
     """
 
-    z_res=64
-
-    resolution = (sz, sz, z_res)
+    #set resolution, gridsize and spacing
+    resolution = (z_res, z_res, z_res)
 
     if gridsize is None:
-        gridsize =  sz
+        gridsize =  z_res
 
-    spacing = (gridsize / sz, gridsize / sz, gridsize / z_res)
+    spacing = (gridsize / z_res, gridsize / z_res, gridsize / z_res)
 
-    # Create unique filename using time and a random int
-    timestamp = int(time.time() * 1e6)  # microseconds
-    randint = random.randint(0, 99999)
-    tmp_filename = f"tmp_{timestamp}_{randint}.vtk"
-
-    # Save mesh and read with PyVista
-    meshio.write(tmp_filename, mesh)
-    model = pv.read(tmp_filename)
-    # Delete temporary file
-    os.remove(tmp_filename)
+    #transform the meshio mesh to a pyvista unstructured grid
+    model = meshio_tetra_to_unstructured_grid(mesh)
 
     # Determine origin based on mesh bounds
     bounds = np.array(model.bounds)
@@ -153,10 +193,9 @@ def voxelizeUniform(mesh, sz, gridsize=None, bp_channel=False):
     origin = center - 0.5 * np.array(resolution) * spacing
 
     # Create grid
-    grid = pv.UniformGrid()
+    grid = pv.ImageData()
     grid.dimensions = resolution
     grid.spacing = spacing
-
     grid.origin = origin
 
     # Sample mesh onto grid
@@ -202,7 +241,7 @@ class evalLearnedInputs():
     back into 3D mesh coordinates using the PCA projection matrix.
     """
     
-    def __init__(self, learned_inputs, mode_bounds, mode_means, mesh, PHI):
+    def __init__(self, learned_inputs, mode_bounds, mode_means, mesh, PHI,dicom_exam):
         """
         Initialize the evaluator.
         
@@ -222,6 +261,7 @@ class evalLearnedInputs():
         self.mode_means = mode_means
         self.mesh = deepcopy(mesh)
         self.PHI = PHI + 0  # Create copy
+        self.dicom_exam = dicom_exam
 
     def __call__(self, just_mesh=True):
         """
@@ -236,25 +276,33 @@ class evalLearnedInputs():
         # Get predictions from neural network
         with torch.no_grad():
             modes_output, volume_shift, x_shifts, y_shifts, volume_rotations = self.learned_inputs(self.ones_input)
-            modes_output = modes_output.cpu().numpy()
+            modes_output_reshape = modes_output.view(1,self.num_modes,self.learned_inputs.num_time_steps)
+            modes_output = modes_output_reshape.cpu().numpy()
             volume_shift = volume_shift.cpu().numpy()[0]
             x_shifts = x_shifts.cpu().numpy()
             y_shifts = y_shifts.cpu().numpy()
             volume_rotations = volume_rotations.cpu().numpy()[0, 0]
 
-        # Convert normalized modes to actual PCA coefficients
-        normed_modes = np.concatenate([modes_output[0]])
-        rescaled_modes = (normed_modes * (self.mode_bounds[:, 1] - self.mode_bounds[:, 0]) / 2 + 
-                         self.mode_means)
-        
-        # Generate 3D points from PCA coefficients
-        gt_cp = ampsToPoints(rescaled_modes, self.PHI)
-        #set 3D points to node positions of template mesh
-        self.mesh.points = gt_cp
+        meshes = []
+        rescaled_modes = []
 
-        if just_mesh:
-            return self.mesh
-        return self.mesh, modes_output, rescaled_modes
+        for time_step in range(len(self.dicom_exam.time_frames_to_fit)):
+
+            # Convert normalized modes to actual PCA coefficients
+            normed_modes = np.concatenate([modes_output[0,:,time_step]])
+            
+            rescaled_mode = (normed_modes * (self.mode_bounds[:, 1] - self.mode_bounds[:, 0]) / 2 + 
+                            self.mode_means)
+            
+            # Generate 3D points from PCA coefficients
+            gt_cp = ampsToPoints(rescaled_mode, self.PHI)
+            #set 3D points to node positions of template mesh
+            mesh_copy = deepcopy(self.mesh)
+            mesh_copy.points = gt_cp
+            meshes.append(mesh_copy)
+            rescaled_modes.append(rescaled_mode)
+
+        return meshes, rescaled_modes
 
 
 def ampsToPoints(amps, PHI=None):
@@ -303,6 +351,7 @@ def set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se):
 
     # Determine valve direction from DICOM data
     valve_direction = dicom_exam.rv_direction if dicom_exam.valve_center is None else dicom_exam.aortic_valve_direction
+
     # # Calculate additional rotation for RV direction alignment
     rotM2 = getRotationMatrix(new_mesh_rv_direction, valve_direction)
     rotM = np.dot(rotM2, rotM)
@@ -425,7 +474,7 @@ def resetModel(learned_inputs, eli, use_bp_channel, sz, mesh_offset, ones_input,
         warp_and_slice_model.control_points = predicted_cp
 
 
-def getTensorLabelsAndInputImage(dicom_exam, time_frame):
+def getTensorLabelsAndInputImage(dicom_exam):
     """
     Extract segmentation labels from DICOM exam for a specific time frame.
     
@@ -450,15 +499,15 @@ def getTensorLabelsAndInputImage(dicom_exam, time_frame):
 
         for slice_idx in range(series.slices):
             # Extract myocardium and blood pool masks
-            myo = series.prepped_seg[time_frame, slice_idx][None, None, ..., None] == 2
-            bp = series.prepped_seg[time_frame, slice_idx][None, None, ..., None] == 3
+            myo = series.prepped_seg[:, slice_idx][None, None, ..., None] == 2
+            bp = series.prepped_seg[:, slice_idx][None, None, ..., None] == 3
             
             # Combine channels
             tensor_labels.append(np.concatenate([myo, bp], axis=1))
 
     # Concatenate all labels and convert to tensor
     tensor_labels = np.concatenate(tensor_labels, axis=-1)
-    tensor_labels = torch.Tensor(tensor_labels).to(device)
+    tensor_labels = torch.Tensor(tensor_labels).to(device).permute(0, 1, 3, 4, 5, 2)
 
     return tensor_labels
 
@@ -525,7 +574,7 @@ def get_time_frames_to_fit(dicom_exam, time_frames_to_fit, burn_in_length, num_c
         return time_frames_to_fit
 
 
-def save_results_post_training(dicom_exam, outputs, time_frame, eli, se, sz, use_bp_channel, 
+def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel, 
                               mesh_offset, learned_inputs, tensor_labels, save_mesh=True):
     """
     Save mesh fitting results after training completion.
@@ -547,39 +596,53 @@ def save_results_post_training(dicom_exam, outputs, time_frame, eli, se, sz, use
         float: Final Dice coefficient
     """
     # Generate final mesh and rendered results
-    ones_input = torch.Tensor(np.ones((1, 1))).to(device)
-    msh, modes, rescale_modes = eli(just_mesh=False)
-    mesh_render = getSlices(se, msh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input)
+    msh, rescale_modes = eli()
+
+    d0_values = []
+    d1_values = []
+
+    for index, time_step in enumerate(dicom_exam.time_frames_to_fit):
     
-    d0 = dice_loss(outputs[:,:1], tensor_labels[:,:1])  # Myocardium
-    d1 = dice_loss(outputs[:,1:], tensor_labels[:,1:])  # Blood pool
+        d0 = dice_loss(outputs[index][:,:1], tensor_labels[:,:1,:,:,:,time_step])  # Myocardium
+        d1 = dice_loss(outputs[index][:,1:], tensor_labels[:,1:,:,:,:,time_step])  # Blood pool
 
-    # Store results in DICOM exam object
-    dicom_exam.fitted_meshes[time_frame] = {}
-    dicom_exam.fitted_meshes[time_frame].setdefault('rendered_and_sliced', []).append(
-        np.transpose(mesh_render.cpu().numpy()[0], (3, 1, 2, 0)))
+        d0_values.append(d0.item())
+        d1_values.append(d1.item())
 
-    if save_mesh:
-        # Create output directory
-        output_folder = dicom_exam.folder['meshes']
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
+        # Store rendered and sliced mesh in DICOM exam object for visulization
+        ones_input = torch.Tensor(np.ones((1, 1))).to(device)
+        mesh_render = getSlices(se, msh[index], sz, use_bp_channel, mesh_offset, learned_inputs, ones_input, index)
 
-        # Save mesh as VTK file
-        mesh_filename = os.path.join(output_folder, "mesh_t=%d.vtk" % time_frame)
-        meshio.write(mesh_filename, msh)
+        dicom_exam.fitted_meshes[time_step] = {}
+        dicom_exam.fitted_meshes[time_step].setdefault('rendered_and_sliced', []).append(
+            np.transpose(outputs[index].cpu().numpy()[0], (3, 1, 2, 0)))
         
-        # Save PCA mode coefficients as CSV
-        csv_filename = os.path.join(output_folder, "mesh_t=%d.csv" % time_frame)
-        with open(csv_filename, 'w', newline='') as file:
-            writer = csv.writer(file)
-            for coefficient in rescale_modes:
-                writer.writerow([coefficient])
+
+        if save_mesh:
+            # Create output directory
+            output_folder = dicom_exam.folder['meshes']
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+
+            output_folder_csv = dicom_exam.folder['meshes_csv']
+            if not os.path.exists(output_folder_csv):
+                os.makedirs(output_folder_csv)
+
+            # Save mesh as VTK file
+            mesh_filename = os.path.join(output_folder, "mesh_t=%d.vtk" % time_step) #these two meshes are exactly the same 
+            meshio.write(mesh_filename, msh[index])
+
+            # Save PCA mode coefficients as CSV
+            csv_filename = os.path.join(output_folder_csv, "mesh_t=%d.csv" % time_step)
+            with open(csv_filename, 'w', newline='') as file:
+                writer = csv.writer(file)
+                for coefficient in rescale_modes[index]:
+                    writer.writerow([coefficient])
     
-    return d0.item() ,d1.item()
+    return d0_values ,d1_values
 
 
-def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input):
+def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input, index):
     """
     Extract 2D slices from 3D mesh using the slice extraction model.
     
@@ -597,13 +660,14 @@ def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_in
     """
     # Get transformation parameters from network
     modes_output, global_offsets, x_shifts, y_shifts, global_rotations = learned_inputs(ones_input)
-    per_slice_offsets = torch.cat([y_shifts * 0, y_shifts, x_shifts], dim=-1)
+    per_slice_offsets = torch.cat([y_shifts[:, :, :,index] * 0, y_shifts[:, :, :,index], x_shifts[:, :, :,index]], dim=-1)
 
     # Use the dedicated function for voxelization
     mean_arr_batch, origin = prepare_voxelized_mean_array(mesh, sz, use_bp_channel, device)
 
     # Extract slices using the slice extraction model
-    result = se([mean_arr_batch, global_offsets, per_slice_offsets, global_rotations])
+    result = se([mean_arr_batch, global_offsets[:,:,:,index], per_slice_offsets, global_rotations[:,:,:,index]])
+
     return result
 
 

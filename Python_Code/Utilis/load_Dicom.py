@@ -138,15 +138,6 @@ def dataArrayFromDicomFolder(PathDicom):
     is3D = False
     multifile = True
 
-
-    # flipped_data = data[:,::-1,:,:]
-
-    # flipped_image_ids = image_ids[:, ::-1]
-    # flipped_slice_locations = slice_locations[::-1]
-
-    # flipped_image_positions =  image_positions[::-1] #flip list
-
-
     return data, ConstPixelSpacing, image_ids, dicom_dir_details, slice_locations, trigger_times, image_positions, is3D, multifile
 
 def dataArrayFromDicomSingleFile(PathDicom):
@@ -211,8 +202,5 @@ def dataArrayFromNifti(full_path):
     is3D = False
     multifile = None
     orientation = [0,1,0,1,0,0]
-    # orientation = [1,0,0,1,0,0]
-    # name += 'sax_stack'
-
 
     return (data, pixel_spacing, image_ids, dicom_details, slice_locations, trigger_times, image_positions, is3D,multifile, orientation)

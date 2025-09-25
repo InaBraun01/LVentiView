@@ -22,14 +22,12 @@ from skimage.morphology import skeletonize
 # Local imports
 from Python_Code.DicomSeries import DicomSeries
 from Python_Code.Utilis.folder_utils import (
-    generate_exam_folders, sort_folder_names, path_leaf, create_output_folders
+    generate_exam_folders, sort_folder_names, path_leaf
 )
-from Python_Code.Utilis.pytorch_segmentation_utils import (
-    produce_segmentation_at_required_resolution, simple_shape_correction
-)
-from Python_Code.Utilis.visualizeDICOM import planeToXYZ, to3Ch
+
+from Python_Code.Utilis.visualizeDICOM import  to3Ch
 from Python_Code.Utilis.clean_MRI_utils import (
-    clean_slices_base, clean_slices_apex, estimateValvePlanePosition, clean_time_frames,postprocess_cleaned_data
+    clean_slices_base, clean_slices_apex, clean_time_frames,postprocess_cleaned_data
 )
 
 
@@ -62,7 +60,7 @@ class DicomExam:
         center (np.ndarray): Overall center of the cardiac volume
     """
     
-    def __init__(self, base_dir, output_folder='outputs_healthy_test', id_string=None):
+    def __init__(self, base_dir, output_folder, id_string=None):
         """
         Initialize a DicomExam object.
         
@@ -177,6 +175,8 @@ class DicomExam:
                              to be removed at apex (default 0.2 = 20%)
             slice_threshold: threshold of missing slices in order for the time frame 
                              to be removed (default = 1)
+            remove_time_steps: list of times steps (integers) to remove
+            remove_z_slices: list of z heights (integers) to remove
         """
         for series in self:
 
@@ -208,11 +208,11 @@ class DicomExam:
         self.time_frames = self.time_frames - len(incomplete_frames)
 
         #Postprecess cleaned data: Calculate world coordinates and new crop
-        postprocess_cleaned_data(self, self.series)
+        postprocess_cleaned_data(self)
 
             
 
-    def save_images(self, downsample_factor=1, subfolder=None, prefix='', 
+    def save_images(self, downsample_factor=1, subfolder=None, prefix=None, 
                    use_mesh_images=False, overlay=True):
         """
         Save visualization images of the DICOM data and segmentations or 
@@ -229,6 +229,9 @@ class DicomExam:
         ds = downsample_factor
         output_folder = (self.folder['mesh_segs'] if use_mesh_images 
                         else self.folder['initial_segs'])
+        
+        filename = ("Mesh_Visulization" if use_mesh_images
+                    else "Segmentation_Masks")
 
         if subfolder is not None:
             output_folder = os.path.join(output_folder, subfolder)
@@ -262,7 +265,11 @@ class DicomExam:
                     img = img.astype('uint8')
 
             # Save image
-            filename = f'{prefix}_{series.series_folder_name}.png'
+            if prefix:
+                filename = f'{prefix}_{filename}.pdf'
+            else:
+                filename = f'{filename}.pdf'
+
             imageio.imwrite(os.path.join(output_folder, filename), img)
 
     def summary(self):       
@@ -299,15 +306,8 @@ class DicomExam:
 
             for t in range(self.time_frames):
                 for j in range(series.slices):
-                    # if slices_to_use[t, j] and series.distance_from_center[j] > 0:
-                    # # Extract myocardium and blood pool masks
-                    # myo = series.prepped_seg[t, j] == 2
-                    # bp = series.prepped_seg[t, j] == 3
-
-                    # # Create approximate aortic valve mask
-                    # approx_valve_mask = (binary_dilation(bp) * 
-                    #                    (1 - bp) * (1 - myo))
-
+                    
+                    #Extract myocardium and blood pool mask
                     myo = series.prepped_seg[t, j] == 2
                     bp = series.prepped_seg[t, j] == 3
 
@@ -318,9 +318,6 @@ class DicomExam:
                     approx_valve_mask = dilated_bp & ~bp & ~myo
                     approx_valve_mask = approx_valve_mask.astype(np.uint8)
 
-                    # if approx_valve_mask.sum() > 0:
-                    #     print(t,j)
-
                     # Get XYZ coordinates for aortic valve 
                     xyz = series.XYZs[j].reshape((self.sz, self.sz, 3))
                     valve_coords = xyz[approx_valve_mask == 1]
@@ -330,10 +327,7 @@ class DicomExam:
 
         # Calculate median valve center if aortic valve found
         if len(valve_xyzs) > 0:
-            print(len(valve_xyzs))
             self.valve_center = np.median(np.array(valve_xyzs), axis=0)
-            print(self.valve_center)
-            print(self.valve_center.shape)
         else:
             self.valve_center = None
 
@@ -417,7 +411,6 @@ class DicomExam:
 
             if len(rv_xyzs) > 0:
                 rv_xyzs = np.concatenate(rv_xyzs,axis=0)
-                print(self.center)
                 rv_center = np.mean(rv_xyzs,axis=0) - self.center
                 self.rv_center.append( rv_center )
 
@@ -480,7 +473,6 @@ class DicomExam:
         rv_direction = self.rv_center / np.linalg.norm(self.rv_center)
         rv_direction_projected_on_sax_plane = rv_direction - np.dot(rv_direction, self.sax_normal) * self.sax_normal
         self.rv_direction = rv_direction_projected_on_sax_plane / np.linalg.norm(rv_direction_projected_on_sax_plane)
-        print(self.rv_direction)
 
         # Predict aortic valve position and direction
         self.predict_aortic_valve_position()
@@ -492,4 +484,3 @@ class DicomExam:
             aortic_proj = (aortic_direction - 
                           np.dot(aortic_direction, self.sax_normal) * self.sax_normal)
             self.aortic_valve_direction = aortic_proj / np.linalg.norm(aortic_proj)
-            print(self.aortic_valve_direction)

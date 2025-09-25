@@ -2,7 +2,7 @@
 Cardiac Parameter Analysis Module
 
 This module provides functions for computing cardiac parameters from DICOM cardiac MRI data,
-including left ventricular blood pool volume, myocardium measurements, and uncertainty analysis.
+including left ventricular blood pool volume, myocardium volume and thickness calculation.
 """
 
 import os
@@ -29,7 +29,6 @@ from Python_Code.Utilis.thickness_functions import (
     translate_mesh_to_origin,
     cartesian_to_cylindrical,
     find_ring_slices,
-    plot_ring_slices,
     compute_thickness_map,
     meshes_plot_thickness_map
 )
@@ -167,26 +166,6 @@ def _process_lax_series(series, masks, measurements, time_frames: int) -> None:
             measurements[key] = np.nanmean(np.array(measurements[key]), axis=0)
 
 
-def _measure_thickness_radius(masks, time_frame: int, central_slice: int, 
-                             series) -> Tuple[List[float], List[float]]:
-    """Measure myocardium thickness and radius for a given time frame."""
-    slice_options = [-1, 0, 1] if masks.shape[1] >= 3 else [0]
-    thickness_values, radius_values = [], []
-
-    for slice_offset in slice_options:
-        myo_mask = (masks[time_frame, central_slice + slice_offset] == 2).astype(int)
-        thickness_px, radius_px = estimate_thickness_and_radius(myo_mask)
-        
-        # Convert from pixels to mm
-        thickness_mm = thickness_px * series.pixel_spacing[2]
-        radius_mm = radius_px * series.pixel_spacing[2]
-        
-        thickness_values.append(thickness_mm)
-        radius_values.append(radius_mm)
-
-    return thickness_values, radius_values
-
-
 def _calculate_volumes_sax(masks, time_frame: int, num_slices: int, 
                           pixel_volume: float) -> Tuple[float, float]:
     """Calculate myocardium and blood pool volumes for SAX view."""
@@ -216,7 +195,7 @@ def _generate_outputs(measurements, view: str, output_folders: dict,
     """Generate CSV outputs and plots from measurements."""
     if view == 'SAX':
         df = pd.DataFrame({
-            'myo_volumes': measurements['myo_volumes'],
+            'myo_volume': measurements['myo_volumes'],
             'bp_volume': measurements['bp_volumes']
         })
         titles = [
@@ -226,7 +205,7 @@ def _generate_outputs(measurements, view: str, output_folders: dict,
     else:  # LAX
         df = pd.DataFrame({
             'bp_volume': measurements['bp_volumes'],
-            'myo_volumes': measurements['myo_volumes'],
+            'myo_volume': measurements['myo_volumes'],
             'myo_length': measurements['lengths']
         })
         titles = [
@@ -235,7 +214,7 @@ def _generate_outputs(measurements, view: str, output_folders: dict,
             "Length of Myocardium [mm]"
         ]
     
-    filename = 'seg_volumes_cal.csv'
+    filename = 'simpson_volumes.csv'
 
     # Generate plots
     for i, col in enumerate(df.columns):
@@ -415,58 +394,6 @@ def estimate_thickness_and_radius(myo_mask: np.ndarray) -> Tuple[float, float]:
     return thickness, radius
 
 
-def calculate_segmentation_uncertainty(dicom_exam, masks_type: str = 'mesh') -> None:
-    """
-    Calculate and visualize segmentation uncertainty from mesh predictions.
-    
-    Parameters:
-    -----------
-    dicom_exam : DicomExam
-        DICOM examination object
-    masks_type : str
-        Type of masks to analyze (currently only 'mesh' supported)
-    """
-    if dicom_exam[0].mesh_seg is None:
-        print('Run fitMesh() before calculating uncertainty')
-        return
-
-    output_folder = dicom_exam.folder['mesh_seg_uncertainty']
-    os.makedirs(output_folder, exist_ok=True)
-
-    for series in dicom_exam:
-        ap_mean = series.mesh_seg
-        ap_std = series.mesh_seg_std
-
-        # Calculate uncertainty: 1 - (total activation) / (number of active pixels)
-        active_pixels = np.sum(ap_mean > 0, axis=(2, 3)) + 1e-6
-        total_activation = np.sum(ap_mean, axis=(2, 3))
-        uncertainty = 1 - total_activation / active_pixels
-
-        # Save standard deviation image if available
-        if ap_std is not None:
-            std_img = np.concatenate(np.concatenate(ap_std, axis=2))
-            std_img = ((std_img / 0.5) * 255).astype('uint8')
-            imageio.imwrite(
-                os.path.join(output_folder, 'std_img.png'), 
-                std_img
-            )
-
-        # Save mean prediction image
-        mean_img = np.concatenate(np.concatenate(ap_mean, axis=2))
-        mean_img = (mean_img * 255).astype('uint8')
-        imageio.imwrite(
-            os.path.join(output_folder, 'mean_img.png'), 
-            mean_img
-        )
-
-        # Plot uncertainty
-        uncertainty_avg = np.mean(uncertainty[:, :, [1, 2]], axis=-1)
-        plot_uncertainty(
-            uncertainty_avg, 
-            dicom_exam,
-            os.path.join(output_folder, 'per_image_uncertainty.png')
-        )
-
 
 def analyze_mesh_volumes(dicom_exam) -> None:
     """
@@ -539,7 +466,7 @@ def analyze_mesh_volumes(dicom_exam) -> None:
 
     # Save results
     df_ed_es.to_csv(os.path.join(destination_dir, 'ED_ES_states.csv'), index=False)
-    df_volumes.to_csv(os.path.join(destination_dir, 'mesh_volumes_cal.csv'), index=False)
+    df_volumes.to_csv(os.path.join(destination_dir, 'mesh_volumes.csv'), index=False)
 
     # Generate plots
     _plot_mesh_volumes(df_volumes, dicom_exam)
@@ -566,136 +493,78 @@ def _plot_mesh_volumes(df_volumes: pd.DataFrame, dicom_exam) -> None:
         )
 
 
-def plot_uncertainty(uncertainty_avg: np.ndarray, dicom_exam, 
-                    filename: str) -> None:
+def seg_masks_compute_thickness_map(
+    dicom_exam, 
+    n_theta_bins: int = 36, 
+    label_of_interest: int = 2
+) -> None:
     """
-    Create uncertainty heatmap.
+    Compute thickness maps from segmentation masks using polar coordinate analysis.
     
-    Parameters:
-    -----------
-    uncertainty_avg : np.ndarray
-        2D array of uncertainty values (time_frames x slices)
-    dicom_exam : DicomExam
-        DICOM examination object
-    filename : str
-        Output filename for the plot
+    This function analyzes cardiac segmentation masks to compute thickness measurements
+    across different angular bins (theta) and axial slices (z). The thickness is 
+    calculated as the radial distance between the innermost and outermost points
+    of the segmented region in each angular bin.
+    
+    Args:
+        dicom_exam: DICOM examination object containing segmentation data and metadata
+        n_theta_bins (int, optional): Number of angular bins for polar analysis. 
+                                    Defaults to 36 (10° per bin).
+        label_of_interest (int, optional): Segmentation label value to analyze. 
+                                         Defaults to myocardium 2.
+    
+    Returns:
+        None: Function saves thickness maps to disk and creates visualizations
+
     """
-    plt.style.use('default')
-    sns.set_palette("husl")
-
-    fig, ax = plt.subplots(figsize=(12, 8), dpi=300)
-
-    # Create custom colormap
-    colors = ['#440154', '#404387', '#2a788e', '#22a884', '#7ad151', '#fde725']
-    cmap = LinearSegmentedColormap.from_list('uncertainty', colors, N=256)
-
-    # Create heatmap
-    im = ax.imshow(uncertainty_avg, cmap=cmap, aspect='auto', interpolation='bilinear')
-
-    # Add colorbar
-    cbar = plt.colorbar(im, ax=ax, shrink=0.8, aspect=20, pad=0.02)
-    cbar.set_label('Mean Uncertainty', fontsize=14, fontweight='bold', labelpad=15)
-    cbar.ax.tick_params(labelsize=12)
-
-    # Labels and title
-    ax.set_xlabel('SAX Slice Index', fontsize=14, fontweight='bold', labelpad=10)
-    ax.set_ylabel('Time Frame', fontsize=14, fontweight='bold', labelpad=10)
-    ax.set_title(
-        f'Spatiotemporal Uncertainty Distribution\nExam ID: {dicom_exam.id_string}',
-        fontsize=16, fontweight='bold', pad=20
-    )
-
-    # Customize ticks
-    n_frames, n_slices = uncertainty_avg.shape
-    x_ticks = np.arange(0, n_slices, max(1, n_slices // 10))
-    y_ticks = np.arange(0, n_frames, max(1, n_frames // 10))
-    ax.set_xticks(x_ticks)
-    ax.set_yticks(y_ticks)
-
-    # Add grid and statistics
-    ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
-    
-    mean_uncert = np.mean(uncertainty_avg)
-    std_uncert = np.std(uncertainty_avg)
-    ax.text(
-        0.02, 0.98, f'μ = {mean_uncert:.3f}\nσ = {std_uncert:.3f}',
-        transform=ax.transAxes, fontsize=11, fontweight='bold',
-        verticalalignment='top',
-        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray')
-    )
-
-    plt.tight_layout()
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
-    plt.close(fig)
-
-def seg_masks_compute_thickness_map(dicom_exam, n_theta_bins=36, label_of_interest=2):
-
     output_folder = dicom_exam.folder['seg_thickness']
-
+    
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     
     for time in range(dicom_exam.time_frames):
-        seg_stack = dicom_exam.series[0].prepped_seg[time,:,:,:]
+        seg_stack = dicom_exam.series[0].prepped_seg[time, :, :, :]
         Z, H, W = seg_stack.shape
         
+        # Initialize thickness map with NaN values
         thickness_map = np.full((Z, n_theta_bins), np.nan)
         
-        # Create azimuthal bins [0, 2pi]
+        # Create azimuthal bins from 0 to 2π
         theta_bins = np.linspace(0, 2 * np.pi, n_theta_bins + 1)
-
-        #calculate center from basal plane
-        if dicom_exam.MRI_orientation == "base_top":
-            seg_slice = seg_stack[0]
-            
-            # Extract points of label_of_interest
-            ys, xs = np.where(seg_slice == label_of_interest)
-
-            xs = xs* dicom_exam.series[0].pixel_spacing[1] #scale according to MRI resolution
-            ys = ys* dicom_exam.series[0].pixel_spacing[2] #scale according to MRI resolution
-            
-            # Compute centroid (mean of points)
-            cx, cy = xs.mean(), ys.mean()
-
-
-        elif dicom_exam.MRI_orientation == "apex_top":
-            seg_slice = seg_stack[-1]
-            
-            # Extract points of label_of_interest
-            ys, xs = np.where(seg_slice == label_of_interest)
-
-            xs = xs* dicom_exam.series[0].pixel_spacing[1] #scale according to MRI resolution
-            ys = ys* dicom_exam.series[0].pixel_spacing[2] #scale according to MRI resolution
-            
-            # Compute centroid (mean of points)
-            cx, cy = xs.mean(), ys.mean()
-
         
+        # Calculate center from basal or apical plane based on MRI orientation
+        cx, cy = _calculate_centroid_from_reference_slice(
+            dicom_exam, seg_stack, label_of_interest
+        )
+        
+        # Process each axial slice
         for z in range(Z):
             seg_slice = seg_stack[z]
             
-            # Extract points of label_of_interest
+            # Extract points of interest from segmentation
             ys, xs = np.where(seg_slice == label_of_interest)
-
-            xs = xs* dicom_exam.series[0].pixel_spacing[1] #scale according to MRI resolution
-            ys = ys* dicom_exam.series[0].pixel_spacing[2] #scale according to MRI resolution
-
-            if len(xs) == 0:
-                continue  # no object in this slice
             
-            # Convert points to polar coordinates relative to centroid
-            x_shifted = xs - cx
-            y_shifted = ys - cy
+            if len(xs) == 0:
+                continue  # Skip slices with no segmented regions
+            
+            # Apply pixel spacing to convert to physical coordinates
+            xs_scaled = xs * dicom_exam.series[0].pixel_spacing[1]
+            ys_scaled = ys * dicom_exam.series[0].pixel_spacing[2]
+            
+            # Convert to polar coordinates relative to centroid
+            x_shifted = xs_scaled - cx
+            y_shifted = ys_scaled - cy
             
             r = np.sqrt(x_shifted**2 + y_shifted**2)
-            theta = np.arctan2(y_shifted, x_shifted)  # [-pi, pi]
+            theta = np.arctan2(y_shifted, x_shifted)  # Range: [-π, π]
             
-            # Wrap theta to [0, 2pi]
+            # Normalize theta to [0, 2π] range
             theta = (theta + 2 * np.pi) % (2 * np.pi)
             
-            # Digitize theta into bins
-            theta_idx = np.digitize(theta, theta_bins) - 1  # zero based
+            # Assign theta values to discrete bins
+            theta_idx = np.digitize(theta, theta_bins) - 1  # Convert to zero-based indexing
             
+            # Calculate thickness for each angular bin
             for ti in range(n_theta_bins):
                 mask = (theta_idx == ti)
                 if not np.any(mask):
@@ -703,71 +572,102 @@ def seg_masks_compute_thickness_map(dicom_exam, n_theta_bins=36, label_of_intere
                 
                 r_values = r[mask]
                 thickness = r_values.max() - r_values.min()
-                thickness_map[z, ti] = thickness   #10mm is the distance between slices in z direction
-    
+                thickness_map[z, ti] = thickness
+        
+        # Save and visualize results
         seg_mask_plot_thickness_map(thickness_map, time, output_folder)
-        np.save(os.path.join(output_folder, f"thickness_map_{time}"),thickness_map)
-    return 
+        np.save(os.path.join(output_folder, f"thickness_map_{time}"), thickness_map)
 
 
-def meshes_compute_thickness_map(dicom_exam):
+def _calculate_centroid_from_reference_slice(
+    dicom_exam, 
+    seg_stack: np.ndarray, 
+    label_of_interest: int
+) -> Tuple[float, float]:
+    """
+    Calculate centroid coordinates from reference slice based on MRI orientation.
+    
+    Args:
+        dicom_exam: DICOM examination object with orientation information
+        seg_stack (np.ndarray): 3D segmentation array (Z, H, W)
+        label_of_interest (int): Segmentation label to analyze
+        
+    Returns:
+        Tuple[float, float]: Centroid coordinates (cx, cy) in physical units
+    """
+    if dicom_exam.MRI_orientation == "base_top":
+        reference_slice = seg_stack[0]  # Basal slice
+    elif dicom_exam.MRI_orientation == "apex_top":
+        reference_slice = seg_stack[-1]  # Apical slice
+    else:
+        raise ValueError(f"Unknown MRI orientation: {dicom_exam.MRI_orientation}")
+    
+    # Extract points of interest
+    ys, xs = np.where(reference_slice == label_of_interest)
+    
+    if len(xs) == 0:
+        raise ValueError(f"No pixels found with label {label_of_interest} in reference slice")
+    
+    # Apply pixel spacing and calculate centroid
+    xs_scaled = xs * dicom_exam.series[0].pixel_spacing[1]
+    ys_scaled = ys * dicom_exam.series[0].pixel_spacing[2]
+    
+    cx, cy = xs_scaled.mean(), ys_scaled.mean()
+    return cx, cy
 
+
+def meshes_compute_thickness_map(dicom_exam) -> None:
+    """
+    Compute thickness maps from 3D mesh data using cylindrical coordinate analysis.
+    
+    This function processes VTK mesh files to generate thickness measurements
+    in cylindrical coordinates. The mesh is first translated to origin, converted
+    to cylindrical coordinates, and then analyzed in ring-shaped z-slices to
+    compute radial thickness variations.
+    
+    Args:
+        dicom_exam: DICOM examination object containing mesh folder paths and 
+                   time frame information
+    
+    Returns:
+        None: Function saves thickness maps and filtered z-coordinates to disk
+    
+    """
     mesh_folder = dicom_exam.folder['meshes']
-
     output_folder = dicom_exam.folder['mesh_thickness']
-
+    
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
-
+    
     for time_step in dicom_exam.time_frames_to_fit:
-
-        mesh_filename = os.path.join(mesh_folder, "mesh_t=%d.vtk" % time_step) #these two meshes are exactly the same 
-
+        # Load mesh data
+        mesh_filename = os.path.join(mesh_folder, f"mesh_t={time_step}.vtk")
+        
+        if not os.path.exists(mesh_filename):
+            print(f"Warning: Mesh file not found: {mesh_filename}")
+            continue
+            
         mesh = pv.read(mesh_filename)
         points = mesh.points
-
-        # Translate mesh to origin based on basal points threshold
+        
+        # Preprocess mesh: translate to origin
         translate_mesh_to_origin(mesh, points, threshold=0)
-
-        # Convert points to cylindrical coordinates
+        
+        # Convert Cartesian coordinates to cylindrical
         r, theta, z = cartesian_to_cylindrical(points)
-
-        # Find ring-shaped z slices
+        
+        # Identify ring-shaped z-slices for analysis
         ring_slices, z_bins = find_ring_slices(points, n_z_bins=15)
-
-        # Plot the ring-shaped slices
-        plot_ring_slices(points, ring_slices)
-
-        # Compute thickness map and filtered z coords
-        thickness_map, filtered_z_coords = compute_thickness_map(r, theta, z, ring_slices, z_bins)
-
-        # Plot the thickness map
-        meshes_plot_thickness_map(thickness_map, filtered_z_coords,time_step, output_folder)
-        np.save(os.path.join(output_folder, f"thickness_map_{time_step}"),thickness_map)
-        np.save(os.path.join(output_folder, f"filtered_z_coords_{time_step}"),filtered_z_coords)
-
-
-def extract_auto_seg_compare_manu_seg(dicom_exam):
-    df = pd.read_csv('manual_segmentation.csv', header=None)
-    df[1] = df[1].apply(ast.literal_eval)
-    df[0] = df[0].str.strip("'")
-
-    manual_image_ids = df.loc[df[0] ==  dicom_exam.id_string, 1].values[0]
-
-    # Create a boolean mask where True means the value is in the filter list
-    mask = np.isin(dicom_exam.series[0].image_ids, manual_image_ids)
-
-    # Get the indices (row, col) where matches occur
-    indices = np.argwhere(mask)
-
-    output_folder = dicom_exam.folder['seg_masks']
-
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    for index in indices:
-        seg_mask = dicom_exam.series[0].prepped_seg[index[0],index[1],:,:]
-        MRI_data = dicom_exam.series[0].prepped_data[index[0],index[1],:,:]
-        image_id = dicom_exam.series[0].image_ids[index[0],index[1]] 
-        np.save(os.path.join(output_folder, f"seg_mask_{image_id}"), seg_mask)
-        np.save(os.path.join(output_folder, f"mri_data_{image_id}"), MRI_data)
+    
+        
+        # Compute thickness measurements
+        thickness_map, filtered_z_coords = compute_thickness_map(
+            r, theta, z, ring_slices, z_bins
+        )
+        
+        # Save and visualize results
+        meshes_plot_thickness_map(thickness_map, filtered_z_coords, time_step, output_folder)
+        
+        # Save numerical results
+        np.save(os.path.join(output_folder, f"thickness_map_{time_step}"), thickness_map)
+        np.save(os.path.join(output_folder, f"filtered_z_coords_{time_step}"), filtered_z_coords)

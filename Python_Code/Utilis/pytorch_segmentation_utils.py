@@ -5,7 +5,6 @@ from scipy.ndimage import zoom, label
 from scipy.ndimage.measurements import center_of_mass
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
 
 def produce_segmentation_at_required_resolution(data, pixel_spacing, is_sax=True):
     """

@@ -18,19 +18,19 @@ def generate_exam_folders(output_folder, id_string):
 
     folder_structure = {
         'base': [],
-        'mesh_plots': ['seg_analysis_data', 'meshes', 'plots'],
-        'seg_plots': ['seg_analysis_data', 'segmentation', 'plots'],
-        'seg_output_seg': ['seg_analysis_data', 'segmentation'],
-        'seg_thickness': ['seg_analysis_data', 'segmentation', 'thickness'],
-        'seg_output_mesh': ['seg_analysis_data', 'meshes'],
-        'meshes': ['meshes'],
-        'mesh_segs': ['images', 'mesh_seg_images'],
-        'initial_segs': ['images', 'initial_nn_seg_images'],
-        'mesh_seg_uncertainty': ['mesh_seg_uncertainty'],
-        'mesh_vol_plots': ['mesh_analysis_data', 'plots'],
-        'mesh_thickness': ['mesh_analysis_data', 'thickness'],
-        'meshes_output': ['mesh_analysis_data'],
-        'seg_masks': ['seg_masks']
+        'mesh_plots': ['Analysis_Simpson_Method', 'Meshes', 'Plots'],
+        'seg_plots': ['Analysis_Simpson_Method', 'Segmentation_Mask', 'Plots'],
+        'seg_output_seg': ['Analysis_Simpson_Method', 'Segmentation_Mask'],
+        'seg_thickness': ['Analysis_Simpson_Method', 'Segmentation_Mask', 'Thickness_Analysis'],
+        'seg_output_mesh': ['Analysis_Simpson_Method', 'Meshes'],
+        'meshes': ['Meshes', 'VTK_files'],
+        'meshes_csv': ['Meshes', 'Coefficients'],
+        'mesh_segs': ['Meshes'],
+        'initial_segs': ['Segmentation_Masks'],
+        'mesh_vol_plots': ['Analysis_Meshes', 'Plots'],
+        'mesh_thickness': ['Analysis_Meshes', 'Thickness_Analysis'],
+        'meshes_output': ['Analysis_Meshes'],
+        'seg_masks': ['Manual_Segmentation_Masks']
     }
 
     return {
