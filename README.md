@@ -89,7 +89,11 @@ To install the graphical user interface (GUI), simply download the **.zip file**
    
 ---
 Alternatively, you can clone the repository, set up the [Python Virtual Environment](#python-virtual-environment), and launch the GUI from the terminal. To do this, first activate the Python environment, then run:
-
+1. **Activate the Python virtual environment**:
+```bash
+source ~/lventiview_env/bin/activate
+```
+2. **Open the GUI**:
 ```bash
   python LVentiView.py
 ```
