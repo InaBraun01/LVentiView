@@ -153,98 +153,34 @@ The workflow is automated but fully configurable—users can adjust fitting para
 You can also run the software via the terminal without a graphical-user interphase. To do this you need to set up a conda environment or [Python Environment](#python-environment). In this Read Me file I describe how to set up the python environment. 
 
 ### Python Environment
-
-
-
-<!-- Getting Started -->
-## Getting Started
-
-<!-- Prerequisites -->
-### Prerequisites
-
-This project uses Yarn as package manager
+1. **Create and activate a virtual environment**:
 
 ```bash
- npm install --global yarn
+python3 -m venv ~/lventiview_env
+source ~/lventiview_env/bin/activate
 ```
 
-<!-- Installation -->
-### Installation
-
-Install my-project with npm
-
+2. **Upgrade pip**:
 ```bash
-  yarn install my-project
-  cd my-project
+pip install --upgrade pip
 ```
-   
-<!-- Running Tests -->
-### Running Tests
 
-To run tests, run the following command
-
+3. **Install required Python packages:**
 ```bash
-  yarn test test
+pip install numpy==1.23.5 \
+            pyvista==0.42.3 \
+            scipy==1.10.1 \
+            pydicom==2.4.4 \
+            meshio==5.3.5 \
+            tqdm==4.66.4 \
+            imageio==2.33.1 \
+            scikit-image==0.19.3 \
+            torch torchvision torchaudio \
+            pandas==2.0.3 \
+            seaborn==0.13.2 \
+            onnx2torch==1.5.15 \
+            PyQt5==5.15.10
 ```
-
-<!-- Run Locally -->
-### Run Locally
-
-Clone the project
-
-```bash
-  git clone https://github.com/Louis3797/awesome-readme-template.git
-```
-
-Go to the project directory
-
-```bash
-  cd my-project
-```
-
-Install dependencies
-
-```bash
-  yarn install
-```
-
-Start the server
-
-```bash
-  yarn start
-```
-
-
-<!-- Deployment -->
-### Deployment
-
-To deploy this project run
-
-```bash
-  yarn deploy
-```
-
-
-<!-- Usage -->
-## Usage
-
-Use this space to tell a little more about your project and how it can be used. Show additional screenshots, code samples, demos or link to other resources.
-
-
-```javascript
-import Component from 'my-project'
-
-function App() {
-  return <Component />
-}
-```
-
-<!-- Roadmap -->
-## Roadmap
-
-* [x] Todo 1
-* [ ] Todo 2
-
 
 <!-- Contributing -->
 ## Contributing
@@ -293,9 +229,3 @@ Project Link: [https://github.com/Louis3797/awesome-readme-template](https://git
 <!-- Acknowledgments -->
 ## Acknowledgements
 
-Use this section to mention useful resources and libraries that you have used in your projects.
-
- - [Shields.io](https://shields.io/)
- - [Awesome README](https://github.com/matiassingers/awesome-readme)
- - [Emoji Cheat Sheet](https://github.com/ikatyang/emoji-cheat-sheet/blob/master/README.md#travel--places)
- - [Readme Template](https://github.com/othneildrew/Best-README-Template)
