@@ -11,6 +11,7 @@ class MeshGenerationThread(QThread):
     def __init__(self, input_path, output_folder, fit_params=None):
         super().__init__()
         self.input_path = input_path
+        print(self.input_path)
         self.output_folder = output_folder
         self.fit_params = fit_params or {}      # parameters for mesh fitting
         self.de = None                          # will store the loaded DicomExam object

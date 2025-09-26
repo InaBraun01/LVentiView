@@ -2,10 +2,11 @@ import os
 import csv
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, QTextEdit, 
                              QFileDialog, QHBoxLayout, QListWidget, QListWidgetItem, 
-                             QSizePolicy, QCheckBox, QToolButton,QGroupBox, QTabWidget,
-                             QFormLayout, QLineEdit, QScrollArea, QPlainTextEdit)
+                             QSizePolicy, QCheckBox, QToolButton, QGroupBox, QTabWidget,
+                             QFormLayout, QLineEdit, QScrollArea, QPlainTextEdit, QFrame,
+                             QGraphicsDropShadowEffect)
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
-from PyQt5.QtGui import QPixmap, QIntValidator, QValidator
+from PyQt5.QtGui import QPixmap, QIntValidator, QValidator, QFont, QPalette
 from .segmentation_thread import AnalysisThread
 from GUI_utils.zooming import ZoomableImageLabel
 
@@ -27,7 +28,6 @@ class PercentageValidator(QValidator):
             if input_str in ['0', '0.', '1', '1.'] or (input_str.count('.') == 1 and input_str.replace('.', '').isdigit()):
                 return QValidator.Intermediate, input_str, pos
             return QValidator.Invalid, input_str, pos
-        
 
 class IntListValidator(QValidator):
     def validate(self, input_str, pos):
@@ -52,6 +52,81 @@ class IntListValidator(QValidator):
         parts = [p.strip() for p in input_str.split(",") if p.strip().isdigit() and int(p.strip()) > 0]
         return ", ".join(parts)
 
+class ModernCard(QFrame):
+    def __init__(self):
+        super().__init__()
+        self.setFrameStyle(QFrame.NoFrame)
+        self.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 12px;
+                border: none;  /* remove the border */
+                margin: 5px;
+            }
+        """)
+        
+        # Add shadow effect
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(10)
+        shadow.setXOffset(0)
+        shadow.setYOffset(2)
+        shadow.setColor(Qt.lightGray)
+        self.setGraphicsEffect(shadow)
+
+class ModernButton(QPushButton):
+    def __init__(self, text, primary=True, size="normal"):
+        super().__init__(text)
+        self.setCursor(Qt.PointingHandCursor)
+        
+        if size == "large":
+            self.setFixedHeight(45)
+            self.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        else:
+            self.setFixedHeight(35)
+            self.setFont(QFont("Segoe UI", 10, QFont.Medium))
+        
+        if primary:
+            self.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #4A90E2, stop:1 #357ABD);
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #5BA0F2, stop:1 #458ACD);
+                }
+                QPushButton:pressed {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #3A80D2, stop:1 #2F6AAD);
+                }
+                QPushButton:disabled {
+                    background: #bdc3c7;
+                    color: #7f8c8d;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QPushButton {
+                    background-color: #f8f9fa;
+                    border: 2px solid #dee2e6;
+                    border-radius: 8px;
+                    color: #495057;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #e9ecef;
+                    border-color: #4A90E2;
+                    color: #4A90E2;
+                }
+                QPushButton:pressed {
+                    background-color: #dee2e6;
+                }
+            """)
+
 class DicomAnalysisApp(QWidget):
     backRequested = pyqtSignal()
     switchToMeshRequested = pyqtSignal()
@@ -59,60 +134,318 @@ class DicomAnalysisApp(QWidget):
     def __init__(self, folder_manager):
         super().__init__()
         self.folder_manager = folder_manager
-        self.resize(900, 860)
+        self.resize(1000, 900)
+        
+        # Set modern styling
+        self.setStyleSheet("""
+            DicomAnalysisApp {
+                background-color: #f8f9fa;
+            }
+            QWidget {
+                background-color: transparent;
+            }
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f1f3f4;
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c1c1c1;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a1a1a1;
+            }
+            QGroupBox {
+                font: 14px "Segoe UI";
+                font-weight: 600;
+                color: #2c3e50;
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: white;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 8px 0 8px;
+                background-color: white;
+            }
+            QTabWidget::pane {
+                border: 1px solid #dee2e6;
+                border-radius: 6px;
+                background-color: white;
+            }
+            QTabBar::tab {
+                background: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-bottom: none;
+                border-radius: 6px 6px 0 0;
+                padding: 8px 16px;
+                margin-right: 2px;
+                color: #495057;
+                font: 12px "Segoe UI";
+            }
+            QTabBar::tab:selected {
+                background: white;
+                color: #4A90E2;
+                font-weight: 600;
+            }
+            QTabBar::tab:hover {
+                background: #e9ecef;
+            }
+            QCheckBox {
+                font: 12px "Segoe UI";
+                font-weight: 500;
+                color: #2c3e50;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border: 2px solid #dee2e6;
+                border-radius: 3px;
+                background-color: white;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #4A90E2;
+                border-color: #4A90E2;
+            }
+            QLineEdit {
+                border: 2px solid #dee2e6;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font: 14px "Segoe UI";
+                background-color: white;
+            }
+            QLineEdit:focus {
+                border-color: #4A90E2;
+                outline: none;
+            }
+            QTextEdit, QPlainTextEdit {
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                padding: 12px;
+                font: 14px "Segoe UI";
+                background-color: white;
+                color: #2c3e50;
+            }
+            QListWidget {
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                background-color: white;
+                alternate-background-color: #f8f9fa;
+                font: 12px "Segoe UI";
+                padding: 4px;
+            }
+            QListWidget::item {
+                border-radius: 4px;
+                padding: 6px 8px;
+                margin: 1px;
+            }
+            QListWidget::item:selected {
+                background-color: #4A90E2;
+                color: white;
+            }
+            QListWidget::item:hover {
+                background-color: #e3f2fd;
+            }
+        """)
 
         # --- Main layout ---
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
         self.setLayout(main_layout)
 
-        # --- Scroll area setup for all widgets ---
+        # --- Header with back button ---
+        self.create_header(main_layout)
+        
+        # --- Main content in scroll area ---
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.setSpacing(20)
         scroll_area.setWidget(scroll_content)
-
-        # Add scroll area to main layout
         main_layout.addWidget(scroll_area)
-        self.layout = scroll_layout  # store for adding child widgets
+        
+        self.layout = scroll_layout
 
-        # --- Back button setup ---
-        self.back_button = QToolButton()
-        self.back_button.setArrowType(Qt.LeftArrow)  # left-pointing arrow
-        self.back_button.setToolTip("Back to Start Page")
-        self.back_button.setFixedSize(30, 30)
-        self.back_button.clicked.connect(self.backRequested.emit)
+        # --- Folder selection in card ---
+        self.create_folder_selection()
 
+        # --- Parameters section ---
+        self.create_parameters_section()
+
+        # --- Analysis controls ---
+        self.create_analysis_controls()
+
+        # --- Results section ---
+        self.create_results_section()
+
+        self.update_input_label(self.folder_manager.get_input_folder())
+        self.update_output_label(self.folder_manager.get_output_folder())
+
+        # --- Connect folder manager signals ---
+        self.folder_manager.inputFolderChanged.connect(self.update_input_label)
+        self.folder_manager.outputFolderChanged.connect(self.update_output_label)
+
+
+        # --- State variables ---
+        self.selected_input_folder = None
+        self.selected_output_folder = None
+        self.analysis_thread = None
+        self.seg_image_folder = None
+        self.cardiac_plot_folder = None
+
+    def create_header(self, main_layout):
+        header_card = ModernCard()
+        header_layout = QVBoxLayout(header_card)
+        header_layout.setContentsMargins(25, 20, 25, 20)
+        
+        # Top row with back button and title
         top_layout = QHBoxLayout()
+        
+        self.back_button = QToolButton()
+        self.back_button.setArrowType(Qt.LeftArrow)
+        self.back_button.setToolTip("Back to Start Page")
+        self.back_button.setFixedSize(35, 35)
+        self.back_button.setCursor(Qt.PointingHandCursor)
+        self.back_button.clicked.connect(self.backRequested.emit)
+        self.back_button.setStyleSheet("""
+            QToolButton {
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                background-color: white;
+                color: #000000;
+            }
+            QToolButton:hover {
+                border-color: #4A90E2;
+                color: #000000;
+                background-color: #f8f9fa;
+            }
+        """)
+        
+        title = QLabel("Segmentation Module")
+        title.setFont(QFont("Segoe UI", 24, QFont.Bold))
+        title.setStyleSheet("color: #000000; margin-left: 15px;")
+        
         top_layout.addWidget(self.back_button)
+        top_layout.addWidget(title)
         top_layout.addStretch()
-        self.layout.addLayout(top_layout)
+        
+        # Description
+        description = QLabel("Automated cardiac MRI segmentation, data cleaning and volume calculation using Simpson's Method")
+        description.setFont(QFont("Segoe UI", 12))
+        description.setStyleSheet("color: #000000; margin-top: 8px;")
+        description.setWordWrap(True)
+        
+        header_layout.addLayout(top_layout)
+        header_layout.addWidget(description)
+        
+        main_layout.addWidget(header_card)
 
-        # --- Folder selection UI ---
-        self.setup_folder_ui()
+    def create_folder_selection(self):
+        folder_card = ModernCard()
+        folder_layout = QVBoxLayout(folder_card)
+        folder_layout.setContentsMargins(25, 20, 25, 20)
+        folder_layout.setSpacing(15)
+        
+        # Section title
+        section_title = QLabel("Data Selection")
+        section_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        section_title.setStyleSheet("color: #000000; margin-bottom: 5px;")
+        folder_layout.addWidget(section_title)
+        
+        # Input folder
+        input_layout = QHBoxLayout()
+        input_layout.setSpacing(15)
+        self.input_label = QLabel("No MRI data folder selected")
+        self.input_label.setStyleSheet("""
+            QLabel {
+                color: #495057;
+                font: 14px "Segoe UI";
+                padding: 8px;
+                background-color: #f8f9fa;
+                border: 2px solid #dee2e6;
+                border-radius: 6px;
+            }
+        """)
+        self.input_label.setAutoFillBackground(False)
+        btn_pick_input = ModernButton("Browse MRI Data...", primary=False)
+        btn_pick_input.clicked.connect(self.pick_input_folder)
+        
+        input_layout.addWidget(self.input_label, stretch=1)
+        input_layout.addWidget(btn_pick_input)
+        folder_layout.addLayout(input_layout)
+        
+        # Output folder
+        output_layout = QHBoxLayout()
+        output_layout.setSpacing(15)
+        self.output_label = QLabel("No output folder selected")
+        self.output_label.setStyleSheet("""
+            QLabel {
+                color: #495057;
+                font: 14px "Segoe UI";
+                padding: 8px;
+                background-color: #f8f9fa;
+                border: 2px solid #dee2e6;
+                border-radius: 6px;
+            }
+        """)
+        btn_pick_output = ModernButton("Browse Output...", primary=False)
+        btn_pick_output.clicked.connect(self.pick_output_folder)
+        
+        output_layout.addWidget(self.output_label, stretch=1)
+        output_layout.addWidget(btn_pick_output)
+        folder_layout.addLayout(output_layout)
+        
+        self.layout.addWidget(folder_card)
 
+
+    def create_parameters_section(self):
         # Dictionaries to store parameter input widgets
         self.param_fields = {}
         self.crop_param_fields = {}
-
-        # --- Parameters group/tab setup ---
-        self.set_params_group = QGroupBox("Set Parameters")
-        self.set_params_group.setCheckable(True)
-        self.set_params_group.setChecked(False)
-        self.set_params_group.toggled.connect(self.toggle_params_visibility)
+        # Create a QGroupBox without a title
+        self.set_params_group = QGroupBox()  # no title
         self.layout.addWidget(self.set_params_group)
+
         group_layout = QVBoxLayout()
+        group_layout.setContentsMargins(15, 20, 15, 15)
         self.set_params_group.setLayout(group_layout)
+
+        # Add a large checkbox inside the group box
+        self.params_checkbox = QCheckBox("Select Advanced Parameters")
+        self.params_checkbox.setChecked(False)
+        self.params_checkbox.stateChanged.connect(self.toggle_params_visibility)
+        self.params_checkbox.setStyleSheet("""
+            QCheckBox {
+                font-size: 14px;  /* make text larger */
+                color: #2c3e50;   /* dark color */
+            }
+        """)
+        group_layout.addWidget(self.params_checkbox)
+
+        
         self.set_params_tab_widget = QTabWidget()
         group_layout.addWidget(self.set_params_tab_widget)
-        self.set_params_tab_widget.setVisible(False)  # start hidden
+        self.set_params_tab_widget.setVisible(False)
 
-        # --- Clean data parameters page ---
+        # Clean data parameters tab
         clean_params_widget = QWidget()
         clean_params_layout = QFormLayout(clean_params_widget)
+        clean_params_layout.setSpacing(12)
 
-        # List of clean parameters: key, label, default
         clean_params = [
             ('percentage_base', 'Exclusion threshold at base', '0.3'),
             ('percentage_apex', 'Exclusion threshold at apex', '0.2'),
@@ -124,7 +457,7 @@ class DicomAnalysisApp(QWidget):
             input_widget = QLineEdit()
             input_widget.setText(default)
             
-            # Set appropriate validators for each parameter type
+            # Set validators
             if key in ['percentage_base', 'percentage_apex']:
                 input_widget.setValidator(PercentageValidator())
             elif key == 'slice_threshold':
@@ -135,106 +468,213 @@ class DicomAnalysisApp(QWidget):
             else:
                 self.param_fields[key] = input_widget
 
-            clean_params_layout.addRow(label + ':', input_widget)
+            label_widget = QLabel(label + ':')
+            label_widget.setStyleSheet("font-weight: 500; color: #2c3e50;")
+            clean_params_layout.addRow(label_widget, input_widget)
 
-        self.set_params_tab_widget.addTab(clean_params_widget, "MRI Cleaning Parameters")
+        self.set_params_tab_widget.addTab(clean_params_widget, "MRI Cleaning")
 
-        # --- Manual cleaning parameters page ---
+        # Manual cleaning parameters tab
         manual_params_widget = QWidget()
         manual_params_layout = QFormLayout(manual_params_widget)
+        manual_params_layout.setSpacing(12)
+        
         manual_params = [
-            ('remove_z_slices', 'Z Slices'),
-            ('remove_time_steps', 'Time Steps')
+            ('remove_z_slices', 'Z Slices to Remove'),
+            ('remove_time_steps', 'Time Steps to Remove')
         ]
 
         for key, label in manual_params:
             input_widget = QLineEdit()
-            input_widget.setText("")  # default empty
-            input_widget.setValidator(IntListValidator())  # allow only valid int lists
-            manual_params_layout.addRow(label + ':', input_widget)
+            input_widget.setText("")
+            input_widget.setValidator(IntListValidator())
+            input_widget.setPlaceholderText("e.g., 1,2,5 or leave empty")
+            
+            label_widget = QLabel(label + ':')
+            label_widget.setStyleSheet("font-weight: 500; color: #2c3e50;")
+            manual_params_layout.addRow(label_widget, input_widget)
             self.param_fields[key] = input_widget
 
-        self.set_params_tab_widget.addTab(manual_params_widget, "Manual Cleaning Parameters")
+        self.set_params_tab_widget.addTab(manual_params_widget, "Manual Cleaning")
 
-        # --- Checkboxes for cleaning and cardiac calculations ---
-        self.clean_data_checkbox = QCheckBox("Data Cleaning")
+    def create_analysis_controls(self):
+        controls_card = ModernCard()
+        controls_layout = QVBoxLayout(controls_card)
+        controls_layout.setContentsMargins(25, 20, 25, 20)
+        controls_layout.setSpacing(15)
+        
+        section_title = QLabel("Select Postprocessing Steps")
+        section_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        section_title.setStyleSheet("color: #000000; margin-bottom: 5px;")
+        controls_layout.addWidget(section_title)
+
+        # Checkboxes
+        checkbox_layout = QVBoxLayout()
+        checkbox_layout.setSpacing(10)
+        
+        self.clean_data_checkbox = QCheckBox("Enable Data Cleaning")
         self.clean_data_checkbox.setChecked(True)
-        self.layout.addWidget(self.clean_data_checkbox)
+        self.clean_data_checkbox.setStyleSheet("""
+            QCheckBox {
+                font-size: 14px;  /* make text larger */
+                color: #2c3e50;   /* dark color */
+            }
+        """)
+        checkbox_layout.addWidget(self.clean_data_checkbox)
 
-        self.cardiac_plots_checkbox = QCheckBox("Calculate Volumes")
+        self.cardiac_plots_checkbox = QCheckBox("Calculate Volume Metrics")
         self.cardiac_plots_checkbox.setChecked(True)
         self.cardiac_plots_checkbox.stateChanged.connect(self.toggle_cardiac_plots_visibility)
-        self.layout.addWidget(self.cardiac_plots_checkbox)
+        self.cardiac_plots_checkbox.setStyleSheet("""
+            QCheckBox {
+                font-size: 14px;  /* make text larger */
+                color: #2c3e50;   /* dark color */
+            }
+        """)
+        checkbox_layout.addWidget(self.cardiac_plots_checkbox)
+        
+        controls_layout.addLayout(checkbox_layout)
 
-        # --- Run analysis button ---
-        self.btn_run = QPushButton("Run Analysis")
-        self.btn_run.setEnabled(False)  # initially disabled until folders are selected
+        # Run button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        self.btn_run = ModernButton("Run Segmentation Analysis", primary=True, size="large")
+        self.btn_run.setEnabled(False)
         self.btn_run.clicked.connect(self.run_analysis)
-        self.layout.addWidget(self.btn_run)
+        button_layout.addWidget(self.btn_run)
+        button_layout.addStretch()
+        controls_layout.addLayout(button_layout)
+        
+        self.layout.addWidget(controls_card)
 
-        # --- Connect folder manager signals to update labels ---
-        self.folder_manager.inputFolderChanged.connect(self.update_input_label)
-        self.folder_manager.outputFolderChanged.connect(self.update_output_label)
-        self.update_input_label(self.folder_manager.get_input_folder())
-        self.update_output_label(self.folder_manager.get_output_folder())
+    def create_results_section(self):
+        results_card = ModernCard()
+        results_layout = QVBoxLayout(results_card)
+        results_layout.setContentsMargins(25, 20, 25, 20)
+        results_layout.setSpacing(15)
+        
+        section_title = QLabel("Analysis Progress & Results")
+        section_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        section_title.setStyleSheet("color: #2c3e50; margin-bottom: 5px;")
+        results_layout.addWidget(section_title)
 
-        # --- Log output widget ---
+        # Log output
+        log_label = QLabel("Analysis Log:")
+        log_label.setFont(QFont("Segoe UI", 11, QFont.Medium))
+        log_label.setStyleSheet("color: #495057; margin-bottom: 5px;")
+        results_layout.addWidget(log_label)
+        
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
-        self.layout.addWidget(self.log_output, stretch=1)
+        self.log_output.setMaximumHeight(120)
+        self.log_output.setPlaceholderText("Analysis log will appear here...")
+        self.log_output.setStyleSheet("""
+            QTextEdit {
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                padding: 8px;
+                background-color: #ffffff;
+                color: #2c3e50;
+                font: 14px "Segoe UI";
+            }
+        """)
+        results_layout.addWidget(self.log_output)
 
-        # --- Segmentation images list ---
+        # Two-column layout for lists and results
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(20)
+        
+        # Left column - Lists
+        lists_layout = QVBoxLayout()
+        
+        # Segmentation images
+        self.label_segmentation = QLabel("Segmentation Results:")
+        self.label_segmentation.setFont(QFont("Segoe UI", 11, QFont.Medium))
+        self.label_segmentation.setStyleSheet("color: #495057; margin-bottom: 5px;")
+        lists_layout.addWidget(self.label_segmentation)
+        
         self.seg_image_list = QListWidget()
         self.seg_image_list.itemChanged.connect(self.on_seg_image_checked)
         self.seg_image_list.setMaximumHeight(100)
-        self.label_segmentation = QLabel("Segmentation Masks:")
-        self.label_segmentation.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
-        self.layout.addWidget(self.label_segmentation)
-        self.layout.addWidget(self.seg_image_list)
+        lists_layout.addWidget(self.seg_image_list)
 
-        # --- Cardiac plots list ---
-        self.label_cardiac = QLabel("Blood Pool and Myocardium Volumes:")
-        self.label_cardiac.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
+        # Cardiac plots
+        self.label_cardiac = QLabel("Volume Analysis:")
+        self.label_cardiac.setFont(QFont("Segoe UI", 11, QFont.Medium))
+        self.label_cardiac.setStyleSheet("color: #495057; margin-bottom: 5px; margin-top: 10px;")
+        lists_layout.addWidget(self.label_cardiac)
+        
         self.cardiac_plot_list = QListWidget()
         self.cardiac_plot_list.itemChanged.connect(self.on_cardiac_plot_checked)
         self.cardiac_plot_list.setMaximumHeight(100)
-        self.layout.addWidget(self.label_cardiac)
-        self.layout.addWidget(self.cardiac_plot_list)
+        lists_layout.addWidget(self.cardiac_plot_list)
 
         # Hide cardiac plots initially
         self.label_cardiac.setVisible(self.cardiac_plots_checkbox.isChecked())
         self.cardiac_plot_list.setVisible(self.cardiac_plots_checkbox.isChecked())
 
-        # --- Image display widget ---
+        content_layout.addLayout(lists_layout, stretch=1)
+        
+        # Right column - Image display
+        display_layout = QVBoxLayout()
+        
+        display_label = QLabel("Image Preview:")
+        display_label.setFont(QFont("Segoe UI", 11, QFont.Medium))
+        display_label.setStyleSheet("color: #495057; margin-bottom: 5px;")
+        display_layout.addWidget(display_label)
+        
         self.image_display = ZoomableImageLabel()
-        self.image_display.setText("No image selected")
-        self.layout.addWidget(self.image_display, stretch=3)
+        self.image_display.setText("Select an image from the lists on the left")
         self.image_display.setAlignment(Qt.AlignCenter)
         self.image_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.image_display.setStyleSheet("border: 1px solid gray;")
+        self.image_display.setMinimumHeight(250)
+        self.image_display.setStyleSheet("""
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            color: #7f8c8d;
+            font: 11px "Segoe UI";
+        """)
+        display_layout.addWidget(self.image_display)
+        
+        content_layout.addLayout(display_layout, stretch=2)
+        
+        results_layout.addLayout(content_layout)
 
-        # --- Cardiac function results ---
-        self.results_title = QLabel("Computed Cardiac Function Parameters:")
-        self.results_title.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 10px;")
-        self.layout.addWidget(self.results_title)
+        # Cardiac function results
+        self.results_title = QLabel("Computed Cardiac Parameters:")
+        self.results_title.setFont(QFont("Segoe UI", 11, QFont.Medium))
+        self.results_title.setStyleSheet("color: #495057; margin-bottom: 5px; margin-top: 15px;")
+        results_layout.addWidget(self.results_title)
 
         self.results_box = QPlainTextEdit()
         self.results_box.setReadOnly(True)
-        self.layout.addWidget(self.results_box)
+        self.results_box.setMaximumHeight(120)
+        self.results_box.setPlaceholderText("Cardiac parameters will appear here after analysis...")
+        self.results_box.setStyleSheet("""
+            QPlainTextEdit {
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                padding: 8px;
+                background-color: #ffffff;
+                color: #2c3e50;
+                font: 14px "Segoe UI";
+            }
+        """)
+        results_layout.addWidget(self.results_box)
 
-        # --- Button to switch to mesh generation module ---
-        self.to_mesh_button = QPushButton("Go to Mesh Generation Module")
+        # Switch to mesh button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        self.to_mesh_button = ModernButton("Continue to Mesh Generation", primary=True, size="large")
         self.to_mesh_button.clicked.connect(self.switchToMeshRequested.emit)
         self.to_mesh_button.hide()
-        self.layout.addStretch()
-        self.layout.addWidget(self.to_mesh_button)
+        button_layout.addWidget(self.to_mesh_button)
+        button_layout.addStretch()
+        results_layout.addLayout(button_layout)
+        
+        self.layout.addWidget(results_card)
 
-        # --- State variables ---
-        self.selected_input_folder = None
-        self.selected_output_folder = None
-        self.analysis_thread = None
-        self.seg_image_folder = None
-        self.cardiac_plot_folder = None
+
 
 
     def toggle_cardiac_plots_visibility(self, state):
@@ -265,14 +705,94 @@ class DicomAnalysisApp(QWidget):
         self.layout.addLayout(output_layout)
     
     def pick_input_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select MRI Data Folder")
-        if folder:
+        dialog = QFileDialog(self, "Select MRI Data Folder")
+        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        dialog.setFileMode(QFileDialog.Directory)  # Important: allow directory selection
+        dialog.setOption(QFileDialog.ShowDirsOnly, True)  # Only show folders
+
+        # Apply your light theme
+        dialog.setStyleSheet("""
+            QFileDialog {
+                background-color: white;
+                color: black;
+            }
+            QWidget {
+                background-color: white;
+                color: black;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f1f3f4;
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c1c1c1;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a1a1a1;
+            }
+            QPushButton {
+                background-color: #e0e0e0;
+                color: black;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #d0d0d0;
+            }
+        """)
+
+        if dialog.exec_():
+            folder = dialog.selectedFiles()[0]  # Get the selected folder
             self.folder_manager.set_input_folder(folder)
+            self.update_input_label(folder)
     
     def pick_output_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder")
-        if folder:
+        dialog = QFileDialog(self, "Select Output Folder")
+        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        dialog.setFileMode(QFileDialog.Directory)  # Important: allow directory selection
+        dialog.setOption(QFileDialog.ShowDirsOnly, True)  # Only show folders
+
+        # Apply your light theme
+        dialog.setStyleSheet("""
+            QFileDialog {
+                background-color: white;
+                color: black;
+            }
+            QWidget {
+                background-color: white;
+                color: black;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f1f3f4;
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c1c1c1;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a1a1a1;
+            }
+            QPushButton {
+                background-color: #e0e0e0;
+                color: black;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #d0d0d0;
+            }
+        """)
+
+        if dialog.exec_():
+            folder = dialog.selectedFiles()[0]  # Get the selected folder
             self.folder_manager.set_output_folder(folder)
+            self.update_output_label(folder)
     
     def update_input_label(self, folder):
         self.selected_input_folder = folder 
@@ -330,7 +850,7 @@ class DicomAnalysisApp(QWidget):
         self.seg_image_list.blockSignals(True)
         self.seg_image_list.clear()
         try:
-            images = [f for f in os.listdir(folder_path) if f.lower().endswith('.png')]
+            images = [f for f in os.listdir(folder_path) if f.lower().endswith('.pdf')]
             images.sort()
             for img_name in images:
                 item = QListWidgetItem(img_name)
