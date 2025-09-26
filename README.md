@@ -48,9 +48,9 @@
 # Table of Contents
 
 - [About the Project](#about-the-project)
-  * [Screenshots](#screenshots)
-  * [Tech Stack](#tech-stack)
-  * [Features](#features)
+- [About the Software](#about-the-software)
+  * [About the Segmentation Module](#about-the-segmentation-module)
+  * [About the Mesh Generation Module](#about-the-mesh-generation-module)
   * [Color Reference](#color-reference)
   * [Environment Variables](#environment-variables)
 - [Getting Started](#getting-started)
@@ -82,11 +82,16 @@ The Segmentation module enables users to upload and process cardiac MRI series w
 The Mesh Generation module constructing a 3D LV model from segmented MRI data, as well as LVV, EF and myocardial thickness quantification from the generated 3D mesh. In the default workflow, users select a folder containing the segmentation data in a serialized (.pkl) format and specify an output directory for the generated mesh and analysis outputs. Upon initiating the fitting process via the $Run$ $Mesh$ $Fitting$ button in the user-interphase or via the terminal, the software automatically constructs one volumetric mesh for each time-step imaged in the MRI data. The generated meshes are saved in a .vtk format. Additionally, a visualization of the meshes overlaid on the MRI images is stored, along with the Dice scores quantifying the fit between the mesh and the segmentation masks. The Mesh Generation module also includes two post-processing methods. First, myocardial and blood pool volumes are computed directly from the generated meshes, the ED and ES states are identified, and the volumes are plotted over the cardiac cycle. Second, a local thickness map is calculated for each time point in the cardiac cycle using the volumetric meshes. Although the default workflow is fully automated, users retain complete control over the mesh fitting and analysis processes. Parameters for mesh fitting can be adjusted, including the option to fit meshes to specific time steps, and volume or local thickness calculations can be enabled or disabled.
 
 <!-- Graphical User Interphase -->
-### Screenshots
+### Graphical User Interphase
 
+## Getting started
+
+## Start Page
 <div align="center"> 
   <img src="https://placehold.co/600x400?text=Your+Screenshot+here" alt="screenshot" />
 </div>
+
+## Segmentation Module
 
 
 <!-- Env Variables -->
