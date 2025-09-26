@@ -83,9 +83,11 @@ LVentiView is organized into two main modules: the Segmentation module and the M
 ## Graphical User Interphase
 
 ### Installation  
-To install the graphical user interface (GUI), simply download the **.zip file** for your operating system and follow the instructions below.  
+To install the graphical user interface (GUI), simply download the **.zip file** for your operating system and follow the instructions below. Alternatively, you can clone the repository, set up the [Python environment](#python-environment), and launch the GUI from the terminal. To do this, first activate the Python environment, then run:
 
----
+```bash
+python LVentiView.py
+
 
 #### Linux & macOS  
 1. Download the app (.zip file).  
@@ -142,9 +144,11 @@ The workflow is automated but fully configurable—users can adjust fitting para
 
 ---
 
-
 <!-- Env Variables -->
-### Environment Variables
+## Code
+You can also use the code both to 
+
+To run this project you need to clone the repository as well as locally install a conda or python environment. Below I describe how to set up the 
 
 To run this project, you will need to add the following environment variables to your .env file
 
