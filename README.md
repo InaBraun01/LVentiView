@@ -32,9 +32,6 @@
 </p>
    
 <h4>
-    <a href="https://github.com/InaBraun01/LVentiView/">View Demo</a>
-  <span> · </span>
-    <a href="https://github.com/InaBraun01/LVentiView">Documentation</a>
   <span> · </span>
     <a href="https://github.com/InaBraun01/LVentiView/issues/">Report Bug</a>
   <span> · </span>
