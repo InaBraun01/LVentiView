@@ -84,7 +84,26 @@ The Mesh Generation module constructing a 3D LV model from segmented MRI data, a
 <!-- Graphical User Interphase -->
 ### Graphical User Interphase
 
-## Getting started
+### Installation  
+
+To install the graphical user interface (GUI), simply download the **.zip file** for your operating system and follow the instructions below.  
+
+---
+
+### Linux & macOS  
+1. Download the app (.zip file).  
+2. Unzip the app to extract the `.app` file.  
+3. Move the extracted `.app` file to your `/Applications` folder.  
+4. You can now open **LVentiView** like any other application.  
+
+---
+
+### Windows  
+1. Download the installer.  
+2. Run the installer and follow the on-screen instructions.  
+3. Once installed, open **LVentiView** from the Start Menu or Desktop shortcut. 
+
+
 
 ## Start Page
 <div align="center"> 
