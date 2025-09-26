@@ -93,13 +93,13 @@ To install the graphical user interface (GUI), simply download the **.zip file**
 3. Move the extracted `.app` file to your `/Applications` folder.  
 4. You can now open **LVentiView** like any other application.  
 
----
+
 #### Windows  
 1. Download the installer.  
 2. Run the installer and follow the on-screen instructions.  
 3. Once installed, open **LVentiView** from the Start Menu or Desktop shortcut. 
 
-
+---
 ### Start Page
 On the **Start Page**, you’ll find an overview of the user interface along with descriptions of all parameters that can be configured manually.  
 From here, you can also navigate directly to the two main modules of **LVentiView**:  
@@ -110,7 +110,7 @@ From here, you can also navigate directly to the two main modules of **LVentiVie
   <img src="https://placehold.co/600x400?text=Your+Screenshot+here" alt="screenshot" />
 </div>
 
----
+
 ### Segmentation Module
 The **Segmentation Module** processes cardiac MRI series with a single click.  
 Users simply choose an input folder and an output directory, then start segmentation by pressing the **Run Segmentation** button in the GUI.
@@ -124,7 +124,6 @@ The workflow is fully automated but can be customized by adjusting thresholds, e
 <div align="center"> 
   <img src="https://placehold.co/600x400?text=Your+Screenshot+here" alt="screenshot" />
 </div>
----
 
 ### Mesh Generation Module
 The **Mesh Generation Module** constructs a 3D LV model from segmented MRI data and provides LVV, EF, and myocardial thickness quantification.  
@@ -140,6 +139,9 @@ The workflow is automated but fully configurable—users can adjust fitting para
 <div align="center"> 
   <img src="https://placehold.co/600x400?text=Your+Screenshot+here" alt="screenshot" />
 </div>
+
+---
+
 
 <!-- Env Variables -->
 ### Environment Variables
