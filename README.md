@@ -32,7 +32,6 @@
 </p>
    
 <h4>
-  <span> · </span>
     <a href="https://github.com/InaBraun01/LVentiView/issues/">Report Bug</a>
   <span> · </span>
     <a href="https://github.com/InaBraun01/LVentiView/issues/">Request Feature</a>
