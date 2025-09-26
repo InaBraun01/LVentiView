@@ -206,16 +206,7 @@ python Main.py
 
 <!-- Contributing -->
 ## Contributing
-
-<a href="https://github.com/Louis3797/awesome-readme-template/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Louis3797/awesome-readme-template" />
-</a>
-
-
-Contributions are always welcome!
-
-See `contributing.md` for ways to get started.
-
+Contributions are welcome! If you’d like to improve LVentiView, feel free to fork the repo, make changes, and submit a pull request.
 
 <!-- License -->
 ## License
