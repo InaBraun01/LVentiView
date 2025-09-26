@@ -49,8 +49,10 @@
 
 - [About the Project](#about-the-project)
 - [About the Software](#about-the-software)
-  * [About the Segmentation Module](#about-the-segmentation-module)
-  * [About the Mesh Generation Module](#about-the-mesh-generation-module)
+- [Graphical User Interphase](#graphical-user-interphase)
+  * [Installation](#installation)
+  * [Linux & macOS](#linux-&-macOS)
+  * [Windows](#windows)
   * [Color Reference](#color-reference)
   * [Environment Variables](#environment-variables)
 - [Getting Started](#getting-started)
@@ -76,42 +78,68 @@ Accurate quantification of left ventricular cavity volume (LVV) and ejection fra
 <!-- About the Software -->
 ## About the Software
 LVentiView is organized into two main modules: the Segmentation module and the Mesh Generation module. The software can be used either through a graphical user interface (GUI) or directly from the terminal. Regardless of the interface, the inputs and outputs remain identical.
-## About the Segmentation Module
-The Segmentation module enables users to upload and process cardiac MRI series with a single click. In the default workflow, the user simply selects an input folder containing the MRI images and specifies an output directory for the segmentation and analysis results. Upon initiating segmentation via the $Run$ $Segmentation$ button in the GUI or via the terminal. A visualization of the segmentation masks is saved, along with the segmented MRI images in a serialized (.pkl) format. By default, two post-processing steps are applied. First, a data-cleaning procedure removes incomplete time points and excludes slices located above the mitral valve plane or below the apex. A visualization of the resulting cleaned segmentation masks is also saved. Second, myocardial and blood pool volumes are calculated from the cleaned segmentation masks using Simpson’s method, the ED and ES state are identified and the volumes are plotted over time. The default workflow runs fully automated. Users can still control post-processing by enabling or disabling data cleaning and volume computation, and by adjusting cleaning thresholds. The GUI also offers manual cleaning, allowing customization for specific data or analysis goals.
-## About the Mesh Generation Module
-The Mesh Generation module constructing a 3D LV model from segmented MRI data, as well as LVV, EF and myocardial thickness quantification from the generated 3D mesh. In the default workflow, users select a folder containing the segmentation data in a serialized (.pkl) format and specify an output directory for the generated mesh and analysis outputs. Upon initiating the fitting process via the $Run$ $Mesh$ $Fitting$ button in the user-interphase or via the terminal, the software automatically constructs one volumetric mesh for each time-step imaged in the MRI data. The generated meshes are saved in a .vtk format. Additionally, a visualization of the meshes overlaid on the MRI images is stored, along with the Dice scores quantifying the fit between the mesh and the segmentation masks. The Mesh Generation module also includes two post-processing methods. First, myocardial and blood pool volumes are computed directly from the generated meshes, the ED and ES states are identified, and the volumes are plotted over the cardiac cycle. Second, a local thickness map is calculated for each time point in the cardiac cycle using the volumetric meshes. Although the default workflow is fully automated, users retain complete control over the mesh fitting and analysis processes. Parameters for mesh fitting can be adjusted, including the option to fit meshes to specific time steps, and volume or local thickness calculations can be enabled or disabled.
 
 <!-- Graphical User Interphase -->
-### Graphical User Interphase
+## Graphical User Interphase
 
 ### Installation  
-
 To install the graphical user interface (GUI), simply download the **.zip file** for your operating system and follow the instructions below.  
 
 ---
 
-### Linux & macOS  
+#### Linux & macOS  
 1. Download the app (.zip file).  
 2. Unzip the app to extract the `.app` file.  
 3. Move the extracted `.app` file to your `/Applications` folder.  
 4. You can now open **LVentiView** like any other application.  
 
 ---
-
-### Windows  
+#### Windows  
 1. Download the installer.  
 2. Run the installer and follow the on-screen instructions.  
 3. Once installed, open **LVentiView** from the Start Menu or Desktop shortcut. 
 
 
+### Start Page
+On the **Start Page**, you’ll find an overview of the user interface along with descriptions of all parameters that can be configured manually.  
+From here, you can also navigate directly to the two main modules of **LVentiView**:  
+- **Segmentation Module**  
+- **Mesh Generation Module**  
 
-## Start Page
 <div align="center"> 
   <img src="https://placehold.co/600x400?text=Your+Screenshot+here" alt="screenshot" />
 </div>
 
-## Segmentation Module
+---
+### Segmentation Module
+The **Segmentation Module** processes cardiac MRI series with a single click.  
+Users simply choose an input folder and an output directory, then start segmentation by pressing the **Run Segmentation** button in the GUI.
 
+By default, two post-processing steps are applied:  
+- **Data cleaning**: removes incomplete time points and slices outside the mitral valve–apex range.  
+- **Volume analysis**: calculates myocardial and blood pool volumes, identifies ED/ES states, and plots volume curves.  
+
+The workflow is fully automated but can be customized by adjusting thresholds, enabling/disabling steps, or performing manual cleaning in the GUI.  
+
+<div align="center"> 
+  <img src="https://placehold.co/600x400?text=Your+Screenshot+here" alt="screenshot" />
+</div>
+---
+
+### Mesh Generation Module
+The **Mesh Generation Module** constructs a 3D LV model from segmented MRI data and provides LVV, EF, and myocardial thickness quantification.  
+
+In the default workflow, users select a folder with segmentation data (.pkl) and an output directory. The fitting process is started by pressing the **Run Mesh Fitting** button in the GUI (or via the terminal). The software then builds one volumetric mesh per MRI time step, saved in `.vtk` format, along with visualizations and Dice scores assessing mesh quality.  
+
+Two post-processing steps are included:  
+- **Volume analysis**: computes myocardial and blood pool volumes, identifies ED/ES states, and plots them over the cardiac cycle.  
+- **Thickness mapping**: generates local myocardial thickness maps for each time point.  
+
+The workflow is automated but fully configurable—users can adjust fitting parameters, restrict fitting to selected time steps, and enable/disable analysis options.  
+
+<div align="center"> 
+  <img src="https://placehold.co/600x400?text=Your+Screenshot+here" alt="screenshot" />
+</div>
 
 <!-- Env Variables -->
 ### Environment Variables
