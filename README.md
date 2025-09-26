@@ -53,10 +53,11 @@
   * [Installation](#installation)
   * [Linux & macOS](#linux-&-macOS)
   * [Windows](#windows)
-  * [Color Reference](#color-reference)
-  * [Environment Variables](#environment-variables)
-- [Getting Started](#getting-started)
-  * [Prerequisites](#prerequisites)
+  * [Start Page](#start-page)
+  * [Segmentation Module](#segmentation-module)
+  * [Mesh Generation Module](#mesh-generation-module)
+- [Code](#code)
+  * [Python Environment](#python-environment)
   * [Installation](#installation)
   * [Running Tests](#running-tests)
   * [Run Locally](#run-locally)
@@ -96,8 +97,9 @@ To install the graphical user interface (GUI), simply download the **.zip file**
 1. Download the installer.  
 2. Run the installer and follow the on-screen instructions.  
 3. Once installed, open **LVentiView** from the Start Menu or Desktop shortcut.
-
-Alternatively, you can clone the repository, set up the [Python environment](#python-environment), and launch the GUI from the terminal. To do this, first activate the Python environment, then run:
+   
+---
+Alternatively, you can clone the repository, set up the [Python Environment](#python-environment), and launch the GUI from the terminal. To do this, first activate the Python environment, then run:
 
 ```bash
   python LVentiView.py
@@ -146,17 +148,13 @@ The workflow is automated but fully configurable—users can adjust fitting para
 
 ---
 
-<!-- Env Variables -->
+<!-- Code -->
 ## Code
-You can also use the code both to 
+You can also run the software via the terminal without a graphical-user interphase. To do this you need to set up a conda environment or [Python Environment](#python-environment). In this Read Me file I describe how to set up the python environment. 
 
-To run this project you need to clone the repository as well as locally install a conda or python environment. Below I describe how to set up the 
+### Python Environment
 
-To run this project, you will need to add the following environment variables to your .env file
 
-`API_KEY`
-
-`ANOTHER_API_KEY`
 
 <!-- Getting Started -->
 ## Getting Started
