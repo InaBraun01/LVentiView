@@ -243,9 +243,9 @@ Distributed under the no License. See LICENSE.txt for more information.
 <!-- Contact -->
 ## Contact
 
-Your Name - [@twitter_handle](https://twitter.com/twitter_handle) - email@email_client.com
+Ina Braun - ina.braun@ds.mpg.de
 
-Project Link: [https://github.com/Louis3797/awesome-readme-template](https://github.com/Louis3797/awesome-readme-template)
+Project Link: [https://github.com/InaBraun01/LVentiView.git](https://github.com/InaBraun01/LVentiView.git)
 
 
 <!-- Acknowledgments -->
