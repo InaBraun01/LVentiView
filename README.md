@@ -2,10 +2,10 @@
 
 
   <img src="assets/logo.png" alt="logo" width="200" height="auto" />
-  <h1>Awesome Readme Template</h1>
+  <h1>LVentiView</h1>
   
   <p>
-    LVentiView 
+    Read Me 
   </p>
   
   
