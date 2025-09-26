@@ -56,12 +56,9 @@
   * [Start Page](#start-page)
   * [Segmentation Module](#segmentation-module)
   * [Mesh Generation Module](#mesh-generation-module)
-- [Code](#code)
-  * [Python Environment](#python-environment)
-  * [Installation](#installation)
-  * [Running Tests](#running-tests)
-  * [Run Locally](#run-locally)
-  * [Deployment](#deployment)
+- [Running LVentiView from the Terminal](#running-lventiview-from-the-terminal)
+  * [Python Virtual Environment](#python-virtual-environment)
+  * [Running LVentiView from the Terminal](#running-lventiview-from-the-terminal)
 - [Usage](#usage)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -148,8 +145,8 @@ The workflow is automated but fully configurable—users can adjust fitting para
 
 ---
 
-<!-- Code -->
-## Code
+<!-- Running LVentiView from the Terminal -->
+## Running LVentiView from the Terminal
 You can also run the software via the terminal without a graphical-user interphase. To do this you need to set up a conda environment or [Python Virtual Environment](#python-virtual-environment). In this Read Me file I describe how to set up the python environment. 
 
 ### Python Virtual Environment
@@ -182,8 +179,30 @@ pip install numpy==1.23.5 \
             PyQt5==5.15.10
 ```
 
-### Running the Code
-To run the Segmentation and Mesh Generation module from the terminal. You first need to activate the 
+### Running LVentiView from the Terminal
+To use the **Segmentation** and **Mesh Generation modules** from the terminal, follow these steps
+1. **Activate the Python virtual environment**:
+```bash
+source ~/lventiview_env/bin/activate
+```
+2. **Specify the input and output folders**:
+Open the ```Main.py``` file and set:
+- The path to the folder containing your MRI images.
+- The output folder where the results will be saved.
+
+3. **Run the workflows**:
+- **Segmentation only**:
+```bash
+python Main.py segmentation
+```
+- **Mesh Generation only**:
+```bash
+python Main.py meshing
+```
+- **Both workflows sequentially** (Segmentation -> Mesh Generation):
+```bash
+python Main.py 
+```
 
 <!-- Contributing -->
 ## Contributing
