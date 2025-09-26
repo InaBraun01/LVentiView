@@ -99,7 +99,7 @@ To install the graphical user interface (GUI), simply download the **.zip file**
 3. Once installed, open **LVentiView** from the Start Menu or Desktop shortcut.
    
 ---
-Alternatively, you can clone the repository, set up the [Python Environment](#python-environment), and launch the GUI from the terminal. To do this, first activate the Python environment, then run:
+Alternatively, you can clone the repository, set up the [Python Virtual Environment](#python-virtual-environment), and launch the GUI from the terminal. To do this, first activate the Python environment, then run:
 
 ```bash
   python LVentiView.py
@@ -150,10 +150,10 @@ The workflow is automated but fully configurable—users can adjust fitting para
 
 <!-- Code -->
 ## Code
-You can also run the software via the terminal without a graphical-user interphase. To do this you need to set up a conda environment or [Python Environment](#python-environment). In this Read Me file I describe how to set up the python environment. 
+You can also run the software via the terminal without a graphical-user interphase. To do this you need to set up a conda environment or [Python Virtual Environment](#python-virtual-environment). In this Read Me file I describe how to set up the python environment. 
 
-### Python Environment
-1. **Create and activate a virtual environment**:
+### Python Virtual Environment
+1. **Create and activate a python virtual environment**:
 
 ```bash
 python3 -m venv ~/lventiview_env
@@ -181,6 +181,9 @@ pip install numpy==1.23.5 \
             onnx2torch==1.5.15 \
             PyQt5==5.15.10
 ```
+
+### Running the Code
+To run the Segmentation and Mesh Generation module from the terminal. You first need to activate the 
 
 <!-- Contributing -->
 ## Contributing
