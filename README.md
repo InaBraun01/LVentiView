@@ -58,7 +58,7 @@
   * [Mesh Generation Module](#mesh-generation-module)
 - [Running LVentiView from the Terminal](#running-lventiview-from-the-terminal)
   * [Python Virtual Environment](#python-virtual-environment)
-  * [Running LVentiView from the Terminal](#running-lventiview-from-the-terminal)
+  * [Running LVentiView](#running-lventiview)
 - [Usage](#usage)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -179,7 +179,7 @@ pip install numpy==1.23.5 \
             PyQt5==5.15.10
 ```
 
-### Running LVentiView from the Terminal
+### Running LVentiView
 To use the **Segmentation** and **Mesh Generation modules** from the terminal, follow these steps
 1. **Activate the Python virtual environment**:
 ```bash
