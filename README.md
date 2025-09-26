@@ -71,79 +71,22 @@
 
 <!-- About the Project -->
 ## About the Project
+Accurate quantification of left ventricular cavity volume (LVV) and ejection fraction (EF) from cardiac magnetic resonance imaging (MRI) is essential for diagnosis and prognosis in cardiovascular care. However, current clinical methods for calculating EF are subject to substantial measurement uncertainty, primarily due to variability in manual segmentation and the use of basic geometric assumptions for interpolation between acquired 2D MRI slices. To address these challenges, LVentiView, an open-source Python platform with a graphical user interface, was developed. The platform integrates automated MRI segmentation, three-dimensional (3D) mesh generation, volumetric analysis, and regional myocardial thickness calculation. Accuracy of the volume calculation was assessed using an idealized left ventricular geometry with known ground-truth volumes. The software was further evaluated on clinical cardiac MRI datasets. LVentiView successfully performed automated segmentation and mesh-based 3D reconstruction, enabling accurate quantification of LVV and regional wall thickness for both an idealized geometry and clinical MRI datasets. By combining automation with an intuitive interface, LVentiView provides a user-friendly tool for quantifying LVV, EF, and regional myocardial thickness. It is designed with potential for integration into clinical practice.
 
+<!-- About the Software -->
+## About the Software
+LVentiView consits of two modules, the Segmentation module and the Mesh Generation module. The software can either be used over a graphical user-interface or over the terminal. In both cases the inputs to the software and the outputs from the software are the same.
+## About the Segmentation Module
+The Segmentation module enables users to upload and process cardiac MRI series with a single click. In the default workflow, the user simply selects an input folder containing the MRI images and specifies an output directory for the segmentation and analysis results. Upon initiating segmentation via the $Run$ $Segmentation$ button in the GUI or via the terminal. A visualization of the segmentation masks is saved, along with the segmented MRI images in a serialized (.pkl) format. By default, two post-processing steps are applied. First, a data-cleaning procedure removes incomplete time points and excludes slices located above the mitral valve plane or below the apex. A visualization of the resulting cleaned segmentation masks is also saved. Second, myocardial and blood pool volumes are calculated from the cleaned segmentation masks using Simpson’s method, the ED and ES state are identified and the volumes are plotted over time. The default workflow runs fully automated. Users can still control post-processing by enabling or disabling data cleaning and volume computation, and by adjusting cleaning thresholds. The GUI also offers manual cleaning, allowing customization for specific data or analysis goals.
+## About the Mesh Generation Module
+The Mesh Generation module constructing a 3D LV model from segmented MRI data, as well as LVV, EF and myocardial thickness quantification from the generated 3D mesh. In the default workflow, users select a folder containing the segmentation data in a serialized (.pkl) format and specify an output directory for the generated mesh and analysis outputs. Upon initiating the fitting process via the $Run$ $Mesh$ $Fitting$ button in the user-interphase or via the terminal, the software automatically constructs one volumetric mesh for each time-step imaged in the MRI data. The generated meshes are saved in a .vtk format. Additionally, a visualization of the meshes overlaid on the MRI images is stored, along with the Dice scores quantifying the fit between the mesh and the segmentation masks. The Mesh Generation module also includes two post-processing methods. First, myocardial and blood pool volumes are computed directly from the generated meshes, the ED and ES states are identified, and the volumes are plotted over the cardiac cycle. Second, a local thickness map is calculated for each time point in the cardiac cycle using the volumetric meshes. Although the default workflow is fully automated, users retain complete control over the mesh fitting and analysis processes. Parameters for mesh fitting can be adjusted, including the option to fit meshes to specific time steps, and volume or local thickness calculations can be enabled or disabled.
 
-<!-- Screenshots -->
+<!-- Graphical User Interphase -->
 ### Screenshots
 
 <div align="center"> 
   <img src="https://placehold.co/600x400?text=Your+Screenshot+here" alt="screenshot" />
 </div>
-
-
-<!-- TechStack -->
-### Tech Stack
-
-<details>
-  <summary>Client</summary>
-  <ul>
-    <li><a href="https://www.typescriptlang.org/">Typescript</a></li>
-    <li><a href="https://nextjs.org/">Next.js</a></li>
-    <li><a href="https://reactjs.org/">React.js</a></li>
-    <li><a href="https://tailwindcss.com/">TailwindCSS</a></li>
-  </ul>
-</details>
-
-<details>
-  <summary>Server</summary>
-  <ul>
-    <li><a href="https://www.typescriptlang.org/">Typescript</a></li>
-    <li><a href="https://expressjs.com/">Express.js</a></li>
-    <li><a href="https://go.dev/">Golang</a></li>
-    <li><a href="https://nestjs.com/">Nest.js</a></li>
-    <li><a href="https://socket.io/">SocketIO</a></li>
-    <li><a href="https://www.prisma.io/">Prisma</a></li>    
-    <li><a href="https://www.apollographql.com/">Apollo</a></li>
-    <li><a href="https://graphql.org/">GraphQL</a></li>
-  </ul>
-</details>
-
-<details>
-<summary>Database</summary>
-  <ul>
-    <li><a href="https://www.mysql.com/">MySQL</a></li>
-    <li><a href="https://www.postgresql.org/">PostgreSQL</a></li>
-    <li><a href="https://redis.io/">Redis</a></li>
-    <li><a href="https://neo4j.com/">Neo4j</a></li>
-    <li><a href="https://www.mongodb.com/">MongoDB</a></li>
-  </ul>
-</details>
-
-<details>
-<summary>DevOps</summary>
-  <ul>
-    <li><a href="https://www.docker.com/">Docker</a></li>
-    <li><a href="https://www.jenkins.io/">Jenkins</a></li>
-    <li><a href="https://circleci.com/">CircleCLI</a></li>
-  </ul>
-</details>
-
-<!-- Features -->
-### Features
-
-- Feature 1
-- Feature 2
-- Feature 3
-
-<!-- Color Reference -->
-### Color Reference
-
-| Color             | Hex                                                                |
-| ----------------- | ------------------------------------------------------------------ |
-| Primary Color | ![#222831](https://via.placeholder.com/10/222831?text=+) #222831 |
-| Secondary Color | ![#393E46](https://via.placeholder.com/10/393E46?text=+) #393E46 |
-| Accent Color | ![#00ADB5](https://via.placeholder.com/10/00ADB5?text=+) #00ADB5 |
-| Text Color | ![#EEEEEE](https://via.placeholder.com/10/EEEEEE?text=+) #EEEEEE |
 
 
 <!-- Env Variables -->
