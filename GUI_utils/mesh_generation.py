@@ -14,10 +14,11 @@ def mesh_fit_save_images(input_path, output_folder, log_func=print, progress_fun
     de = loadDicomExam(input_path, output_folder)  # load DicomExam object
     de.summary()  # print summary info
 
+    log_func("Fitting Meshes to Segmentation Masks ...")
     de.fitted_meshes = {}  # initialize mesh container
     fit_mesh(de, progress_callback=progress_func, **fit_params)  # fit meshes, forward progress
 
-    log_func("Save Visualization of Generated Meshes ..")
+    log_func("Save Visualization of Generated Meshes ...")
     de.save_images(use_mesh_images=True)  # save mesh visualization images
     de.save()  # save updated DicomExam object
 

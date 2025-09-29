@@ -618,7 +618,7 @@ class DicomAnalysisApp(QWidget):
         # Right column - Image display
         display_layout = QVBoxLayout()
         
-        display_label = QLabel("Image Preview:")
+        display_label = QLabel("Figure Preview:")
         display_label.setFont(QFont("Segoe UI", 11, QFont.Medium))
         display_label.setStyleSheet("color: #495057; margin-bottom: 5px;")
         display_layout.addWidget(display_label)
@@ -956,7 +956,6 @@ class DicomAnalysisApp(QWidget):
     def get_clean_params(self):
         params = {}
         for key, widget in self.param_fields.items():
-            print(key)
             text = widget.text().strip()
 
             if key in ['percentage_base', 'percentage_apex']:

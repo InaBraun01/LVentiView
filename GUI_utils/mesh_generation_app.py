@@ -93,11 +93,11 @@ class ModernButton(QPushButton):
                 }
             """)
             
+            
 class ZoomableImageLabel(QLabel):
     def __init__(self):
         super().__init__()
         self.setScaledContents(True)
-
 # --- Main Application Class ---
 
 class MeshGenerationApp(QWidget):
@@ -472,6 +472,16 @@ class MeshGenerationApp(QWidget):
         self.log_output.setReadOnly(True)
         self.log_output.setMaximumHeight(120)
         self.log_output.setPlaceholderText("Mesh generation log will appear here...")
+        self.log_output.setStyleSheet("""
+            QTextEdit {
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                padding: 8px;
+                background-color: #ffffff;
+                color: #2c3e50;
+                font: 14px "Segoe UI";
+            }
+        """)
         results_layout.addWidget(self.log_output)
 
         # Content layout with lists and image display
@@ -532,6 +542,7 @@ class MeshGenerationApp(QWidget):
             color: #7f8c8d;
             font: 11px "Segoe UI";
         """)
+
         display_layout.addWidget(self.image_display)
 
         content_layout.addLayout(display_layout, stretch=2)
@@ -550,6 +561,16 @@ class MeshGenerationApp(QWidget):
         self.dice_box.setReadOnly(True)
         self.dice_box.setMaximumHeight(80)
         self.dice_box.setPlaceholderText("Dice score results will appear here...")
+        self.dice_box.setStyleSheet("""
+            QPlainTextEdit {
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                padding: 8px;
+                background-color: #ffffff;
+                color: #2c3e50;
+                font: 14px "Segoe UI";
+            }
+        """)
         metrics_layout.addWidget(self.dice_box)
         
         # Computed cardiac function parameters
@@ -562,7 +583,18 @@ class MeshGenerationApp(QWidget):
         self.results_box.setReadOnly(True)
         self.results_box.setMaximumHeight(120)
         self.results_box.setPlaceholderText("Volume and thickness calculations will appear here after analysis...")
+        self.results_box.setStyleSheet("""
+            QPlainTextEdit {
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                padding: 8px;
+                background-color: #ffffff;
+                color: #2c3e50;
+                font: 14px "Segoe UI";
+            }
+        """)
         metrics_layout.addWidget(self.results_box)
+        
         
         results_layout.addLayout(metrics_layout)
         self.layout.addWidget(results_card)
@@ -968,8 +1000,15 @@ class MeshGenerationApp(QWidget):
             reader = csv.DictReader(csvfile)
             for row in reader:
                 name = row['state']
-                value = row['volume']
+                value_str = row['volume']
                 time_step = row['time_frame']
+
+                # Try converting to float, fallback to 0.0 if conversion fails
+                try:
+                    value = float(value_str)
+                except ValueError:
+                    value = 0.0
+
                 if name == "EF":
                     lines.append(f"{name}: {value:.2f}%")
                 elif name == "SV":

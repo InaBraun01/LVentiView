@@ -30,7 +30,6 @@ class ModernButton(QPushButton):
                 QPushButton:hover {
                     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                         stop:0 #5BA0F2, stop:1 #458ACD);
-                    transform: translateY(-2px);
                 }
                 QPushButton:pressed {
                     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
