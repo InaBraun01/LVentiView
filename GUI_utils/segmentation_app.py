@@ -344,14 +344,170 @@ class DicomAnalysisApp(QWidget):
         top_layout.addStretch()
         
         # Description
-        description = QLabel("Automated cardiac MRI segmentation, data cleaning and volume calculation using Simpson's Method")
+        # Always visible short description
+        description = QLabel("Automated cardiac MRI segmentation, data cleaning "
+                            "and volume calculation using Simpson's Method")
         description.setFont(QFont("Segoe UI", 12))
         description.setStyleSheet("color: #000000; margin-top: 8px;")
         description.setWordWrap(True)
-        
-        header_layout.addLayout(top_layout)
-        header_layout.addWidget(description)
-        
+
+        # "Help" toggle button
+        help_button = QToolButton()
+        help_button.setText("Help")
+        help_button.setCheckable(True)
+        help_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)  # arrow + text
+        help_button.setArrowType(Qt.RightArrow)
+        help_button.setStyleSheet("""
+            QToolButton {
+                font-weight: bold;
+                color: #4A90E2;   /* <-- your custom blue */
+                border: none;
+                background: transparent;
+            }
+            QToolButton:checked {
+                color: #2C6EBE;   /* optional: darker blue when expanded */
+            }
+        """)
+
+        # Help content (hidden initially)
+        help_content = QTextEdit()
+        help_content.setReadOnly(True)
+        help_content.setHtml("""
+        <div style="font-family: 'Segoe UI'; line-height: 1.6; color: #2c3e50;">
+
+        <p style="margin-bottom: 20px; font-size: 13px;">
+        This module allows you to automatically segment cardiac MRI scans, perform automatic or manual data cleaning, 
+        as well as volumetric analysis using Simpson's Method.
+        </p>
+
+        <p style="margin-bottom: 20px; font-size: 13px;">
+        In the following sections, we describe the different parts where manual input is possible or required.
+        </p>
+
+        <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+        Data Selection
+        </h3>
+
+        <p style="margin-bottom: 10px; font-size: 13px;">
+        The user is required to select the folder containing the MRI images to be segmented and the output folder 
+        into which the results will be saved.
+        </p>
+
+        <div style="margin-left: 15px; margin-bottom: 15px;">
+            <p style="margin-bottom: 8px;"><strong>1. Load MRI Data:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Click on <em>Browse MRI Data...</em> and select the folder containing the MRI images in either DICOM or NIfTI format. 
+            You should have a folder containing all DICOM or NIfTI files for one patient scan. For example, if this folder 
+            is called 'PatientX', select this 'PatientX' folder.
+            </p>
+            
+            <p style="margin-bottom: 8px;"><strong>2. Select Output Folder:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Click on <em>Browse Output...</em> and select the destination folder. A new folder named 'PatientX' will be 
+            created inside your selected output folder, and all analysis results will be saved there.
+            </p>
+        </div>
+
+        <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+        Select Advanced Parameters
+        </h3>
+
+        <p style="margin-bottom: 10px; font-size: 13px;">
+        The parameters in this expandable section can be set manually by the user.
+        </p>
+
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
+            <p style="margin-bottom: 10px; font-weight: 600;">MRI Cleaning:</p>
+            <ul style="margin: 0; padding-left: 25px; font-size: 12px;">
+                <li style="margin-bottom: 6px;"><strong>Exclusion threshold at base:</strong> Defines the threshold for removing incomplete slices at the base of the heart</li>
+                <li style="margin-bottom: 6px;"><strong>Exclusion threshold at apex:</strong> Defines the threshold for removing incomplete slices at the apex</li>
+                <li style="margin-bottom: 6px;"><strong>Exclusion threshold of missing slices:</strong> Maximum number of consecutive missing slices allowed</li>
+                <li style="margin-bottom: 6px;"><strong>Multiplicative padding factor:</strong> Factor by which to pad the cropping region</li>
+            </ul>
+        </div>
+
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
+            <p style="margin-bottom: 10px; font-weight: 600;">Manual Cleaning:</p>
+            <ul style="margin: 0; padding-left: 25px; font-size: 12px;">
+                <li style="margin-bottom: 6px;"><strong>Z Slices to Remove:</strong> Comma-separated list of slice indices to manually exclude (e.g., 1,2,5)</li>
+                <li style="margin-bottom: 6px;"><strong>Time Steps to Remove:</strong> Comma-separated list of time frame indices to manually exclude</li>
+            </ul>
+        </div>
+
+        <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+        Select Postprocessing Steps
+        </h3>
+
+        <div style="margin-left: 15px; margin-bottom: 15px;">
+            <p style="margin-bottom: 8px;"><strong>1. Enable Data Cleaning:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Automatically removes incomplete time points and slices outside the mitral valve–apex range
+            </p>
+            
+            <p style="margin-bottom: 8px;"><strong>2. Calculate Volume Metrics:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Computes cardiac function parameters including EDV, ESV, SV, and EF using Simpson's Method
+            </p>
+        </div>
+
+        <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+        Start Segmentation
+        </h3>
+
+        <p style="margin-bottom: 15px; font-size: 13px;">
+        Click <strong>Run Segmentation Analysis</strong> to begin the automated analysis pipeline.
+        </p>
+
+        <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+        Analysis Progress & Results
+        </h3>
+
+        <div style="margin-left: 15px;">
+            <p style="margin-bottom: 8px;"><strong>1. Analysis Log:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Real-time progress updates and processing messages
+            </p>
+            
+            <p style="margin-bottom: 8px;"><strong>2. Segmentation Results:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Visual overlay of segmentation masks on MRI images for quality assessment
+            </p>
+            
+            <p style="margin-bottom: 8px;"><strong>3. Volume Analysis:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Time-series plots showing blood pool and myocardial volume throughout the cardiac cycle
+            </p>
+            
+            <p style="margin-bottom: 8px;"><strong>4. Computed Cardiac Parameters:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Calculated metrics including end-diastolic volume (EDV), end-systolic volume (ESV), 
+            stroke volume (SV), and ejection fraction (EF)
+            </p>
+        </div>
+
+        </div>
+        """)
+        help_content.setFont(QFont("Segoe UI", 11))
+        help_content.setStyleSheet("QTextEdit { border: none; background: #f9f9f9; }")
+        help_content.setVisible(False)  
+        help_content.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+        # Add to layout (all with stretch=0)
+        header_layout.addLayout(top_layout, 0)
+        header_layout.addWidget(description, 0)
+        header_layout.addWidget(help_button, 0)
+        header_layout.addWidget(help_content, 0)
+
+        # Toggle behavior
+        def toggle_help():
+            visible = help_content.isVisible()
+            help_content.setVisible(not visible)
+            help_button.setArrowType(Qt.DownArrow if not visible else Qt.RightArrow)
+            header_card.adjustSize()   # <-- makes the parent card resize
+            header_card.updateGeometry()
+
+        help_button.clicked.connect(toggle_help)
+                
         main_layout.addWidget(header_card)
 
     def create_folder_selection(self):
@@ -402,7 +558,7 @@ class DicomAnalysisApp(QWidget):
                 border-radius: 6px;
             }
         """)
-        btn_pick_output = ModernButton("Browse Output...", primary=False)
+        btn_pick_output = ModernButton("Browse Folders...", primary=False)
         btn_pick_output.clicked.connect(self.pick_output_folder)
         
         output_layout.addWidget(self.output_label, stretch=1)
@@ -538,7 +694,7 @@ class DicomAnalysisApp(QWidget):
         # Run button
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        self.btn_run = ModernButton("Run Segmentation Analysis", primary=True, size="large")
+        self.btn_run = ModernButton("Run Segmentation", primary=True, size="large")
         self.btn_run.setEnabled(False)
         self.btn_run.clicked.connect(self.run_analysis)
         button_layout.addWidget(self.btn_run)

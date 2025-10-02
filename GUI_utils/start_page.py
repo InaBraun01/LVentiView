@@ -217,6 +217,7 @@ class StartPage(QWidget):
         btn_layout.addStretch()
         
         main_layout.addWidget(button_container)
+    
 
     def create_info_section(self, main_layout):
         # Information card
@@ -249,6 +250,7 @@ class StartPage(QWidget):
         main_layout.addWidget(info_card)
         main_layout.addStretch()
 
+    
     def get_detailed_text(self):
         return """
         <div style="font-family: 'Segoe UI';">
@@ -258,34 +260,35 @@ class StartPage(QWidget):
         </h3>
         
         <p style="margin-bottom: 15px; line-height: 1.6;">
-        The <strong>Segmentation Module</strong> provides automated processing of cardiac MRI series with minimal user interaction. Simply select your input folder and output directory, then initiate the analysis.
+        The <strong>Segmentation Module</strong> provides automatic cardiac MRI segmentation, data cleaning and volume calculation using Simpson's Method. 
         </p>
         
-        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4A90E2;">
-        <p style="margin: 0; font-weight: 600; color: #2c3e50; margin-bottom: 8px;">Key Features:</p>
-        <ul style="margin: 0; padding-left: 20px;">
-        <li style="margin-bottom: 6px;"><strong>Data cleaning:</strong> Automatic removal of incomplete time points and slices outside the mitral valve–apex range</li>
-        <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Precise calculation of myocardial and blood pool volumes</li>
-        <li style="margin-bottom: 6px;"><strong>Cardiac cycle analysis:</strong> Automated ED/ES state identification with volume curve visualization</li>
-        </ul>
-        </div>
-        
+         <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #4A90E2;">
+         <p style="margin: 0; font-weight: 600; color: #2c3e50; margin-bottom: 8px;">Features:</p>
+         <ul style="margin: 0; padding-left: 20px;">
+         <li style="margin-bottom: 6px;"><strong>Segmentation:</strong> Automatic segmentation of left ventricle, blood pool and right ventricle from cardiac MRI.</li>
+         <li style="margin-bottom: 6px;"><strong>Data cleaning:</strong> Automatic removal of incomplete time points and slices above the mitral valve and above the apex</li>
+         <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Calculation of myocardial and blood pool volumes from the Segmentation masks using Simpson's Method</li>
+         <li style="margin-bottom: 6px;"><strong>Cardiac cycle analysis:</strong> Automated ED/ES state identification and SV/EF calculation</li>
+         </ul>
+         </div>
+         </div>
         <h3 style="color: #4A90E2; font-size: 16px; margin-bottom: 15px; border-bottom: 2px solid #e9ecef; padding-bottom: 8px;">
         Mesh Generation Module
         </h3>
         
         <p style="margin-bottom: 15px; line-height: 1.6;">
-        The <strong>Mesh Generation Module</strong> creates detailed 3D left ventricular models from segmented MRI data. Load your segmentation data (.pkl files) and generate comprehensive 3D cardiac models.
+        The <strong>Mesh Generation Module</strong> Fitting of a 3D mesh to segmentation masks, mesh based volume and myocardial thickness calculation
         </p>
         
-        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
-        <p style="margin: 0; font-weight: 600; color: #2c3e50; margin-bottom: 8px;">Advanced Capabilities:</p>
-        <ul style="margin: 0; padding-left: 20px;">
-        <li style="margin-bottom: 6px;"><strong>3D modeling:</strong> High-fidelity mesh construction from segmentation data</li>
-        <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Comprehensive myocardial and blood pool volume computation</li>
-        <li style="margin-bottom: 6px;"><strong>Thickness mapping:</strong> Detailed local myocardial thickness analysis across cardiac cycles</li>
-        </ul>
-        </div>
+         <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #4A90E2;">
+         <p style="margin: 0; font-weight: 600; color: #2c3e50; margin-bottom: 8px;">Features:</p>
+         <ul style="margin: 0; padding-left: 20px;">
+         <li style="margin-bottom: 6px;"><strong>3D modeling:</strong> Fitting of 3D volumetric mesh to MRI segmentation masks</li>
+         <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Mesh-based accurate myocardial and blood pool volume calculation</li>
+         <li style="margin-bottom: 6px;"><strong>Thickness analysis:</strong> Mesh-based local myocardial thickness analysis across cardiac cycles</li>
+         </ul>
+         </div>
         
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 8px; margin-top: 20px;">
         <p style="margin: 0; text-align: center; font-weight: 500;">

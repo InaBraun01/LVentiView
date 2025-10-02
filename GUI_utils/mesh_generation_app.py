@@ -219,9 +219,60 @@ class MeshGenerationApp(QWidget):
         description.setFont(QFont("Segoe UI", 12))
         description.setStyleSheet("color: #000000; margin-top: 8px;")
         description.setWordWrap(True)
+        # "Help" toggle button
+        help_button = QToolButton()
+        help_button.setText("Help")
+        help_button.setCheckable(True)
+        help_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)  # arrow + text
+        help_button.setArrowType(Qt.RightArrow)
+        help_button.setStyleSheet("""
+            QToolButton {
+                font-weight: bold;
+                color: #4A90E2;   /* <-- your custom blue */
+                border: none;
+                background: transparent;
+            }
+            QToolButton:checked {
+                color: #2C6EBE;   /* optional: darker blue when expanded */
+            }
+        """)
+
+        # Help content (hidden initially)
+        help_content = QTextEdit()
+        help_content.setReadOnly(True)
+        help_content.setText(
+            "This module allows you to preprocess MRI scans, perform segmentation "
+            "using deep learning models, clean the segmented data, and calculate "
+            "ventricular volumes based on Simpson’s rule.\n\n"
+            "➡ Steps:\n"
+            "1. Load MRI dataset\n"
+            "2. Run segmentation\n"
+            "3. Review segmentation masks\n"
+            "4. Perform cleaning\n"
+            "5. Calculate volumes\n\n"
+            "Use the controls on the right to configure segmentation options."
+        )
+        help_content.setFont(QFont("Segoe UI", 11))
+        help_content.setStyleSheet("QTextEdit { border: none; background: #f9f9f9; }")
+        help_content.setVisible(False)  
+        help_content.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+        # Add to layout (all with stretch=0)
+        header_layout.addLayout(top_layout, 0)
+        header_layout.addWidget(description, 0)
+        header_layout.addWidget(help_button, 0)
+        header_layout.addWidget(help_content, 0)
+
+        # Toggle behavior
+        def toggle_help():
+            visible = help_content.isVisible()
+            help_content.setVisible(not visible)
+            help_button.setArrowType(Qt.DownArrow if not visible else Qt.RightArrow)
+            header_card.adjustSize()   # <-- makes the parent card resize
+            header_card.updateGeometry()
+
+        help_button.clicked.connect(toggle_help)
         
-        header_layout.addLayout(top_layout)
-        header_layout.addWidget(description)
         self.layout.addWidget(header_card)
 
     def setup_folder_ui(self):
