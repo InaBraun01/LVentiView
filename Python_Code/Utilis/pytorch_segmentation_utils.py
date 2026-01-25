@@ -18,10 +18,12 @@ def produce_segmentation_at_required_resolution(data, pixel_spacing, is_sax=True
     Returns:
         tuple: normalized data, segmentation map, center coordinates (c1, c2)
     """
+
     # Resample to 1mm x 1mm in-plane resolution
     zoom_factors = (1, 1, pixel_spacing[1], pixel_spacing[2])
-    zoom_factors = (1,1,1,1)
+    print(f"Zoom factors: {zoom_factors}")
     data = zoom(data, zoom_factors, order=1)
+
 
     # Normalize intensities
     data = data - data.min()
@@ -32,6 +34,7 @@ def produce_segmentation_at_required_resolution(data, pixel_spacing, is_sax=True
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # device = "cpu"
     model_path = "SegmentationModels/pytorch_my_model.pth" if is_sax else "SegmentationModels/pytorch_my_LAX_model.pth"
+    print(model_path)
     model = torch.load(model_path, map_location=device)
     model.eval()
 
@@ -83,8 +86,10 @@ def get_segmentation(data, model, device, sz=256):
         center_moved_counter += 1
         center_moved = False
 
+
         #crop MRI data around current center coordinates
         roi = get_image_at(c1, c2, data).reshape((-1, sz, sz, 1))
+
         roi = np.transpose(roi, (0, 3, 1, 2))
         roi_tensor = torch.from_numpy(roi).float().to(device)
 

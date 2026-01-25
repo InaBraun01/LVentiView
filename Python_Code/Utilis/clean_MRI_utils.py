@@ -124,7 +124,9 @@ def estimateValvePlanePosition(dicom_exam):
         comparison for more accurate valve plane detection.
     """
     for series in dicom_exam:
-        if series.view == 'SAX':
+        if series.view == 'LAX':
+            series.slice_above_valveplane = None
+        elif series.view == 'SAX':
             # Initialize valve plane heuristic array
             VP_heuristic2 = np.zeros((series.frames, series.slices))
             
@@ -193,10 +195,10 @@ def estimateValvePlanePosition(dicom_exam):
 
             VP_heuristic = VP_heuristic1 == 0
 
-        series.VP_heuristic2 = np.logical_and(VP_heuristic2, VP_heuristic)
+            series.VP_heuristic2 = np.logical_not(VP_heuristic2, VP_heuristic)
 
-        # Store binary result indicating slices above valve plane (inverted logic)
-        series.slice_above_valveplane = series.VP_heuristic2.astype(int)
+            # Store binary result indicating slices above valve plane (inverted logic)
+            series.slice_above_valveplane = series.VP_heuristic2.astype(int)
 
 
 def clean_time_frames(dicom_series, slice_threshold = 2,remove_time_steps=None):

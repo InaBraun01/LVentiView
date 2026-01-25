@@ -56,7 +56,7 @@ class DicomSeries(object):
         
             # Store DICOM metadata
             self.orientation = np.array(list(dicom_details['ImageOrientation']))
-
+        
         self.data = data
         self.pixel_spacing = pixel_spacing
         self.image_ids = image_ids
@@ -116,6 +116,8 @@ class DicomSeries(object):
         # Check for explicit view indicators in folder name
         if 'sax' in folder_name or 'sa' in folder_name:
             self.view = 'SAX'
+        elif 'lax' in folder_name or 'la' in folder_name:
+            self.view = 'LAX'
         elif '2ch' in folder_name:
             self.view = '2CH'
         elif '3ch' in folder_name:

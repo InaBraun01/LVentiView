@@ -348,9 +348,13 @@ def set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se):
     # Calculate rotation to align mesh SAX normal with DICOM SAX normal
     rotM = getRotationMatrix(initial_mesh_sax_normal, dicom_exam.sax_normal)
     new_mesh_rv_direction = np.dot(rotM, initial_mesh_rv_direction)
+    print(new_mesh_rv_direction)
 
     # Determine valve direction from DICOM data
     valve_direction = dicom_exam.rv_direction if dicom_exam.valve_center is None else dicom_exam.aortic_valve_direction
+
+    print(valve_direction)
+    
 
     # # Calculate additional rotation for RV direction alignment
     rotM2 = getRotationMatrix(new_mesh_rv_direction, valve_direction)
@@ -358,6 +362,7 @@ def set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se):
 
     # Convert to Euler angles
     euler_rot = np.array(Rotation.from_matrix(rotM).as_euler('xyz'))
+    print(euler_rot)
 
     # Apply rotation to models
     with torch.no_grad():

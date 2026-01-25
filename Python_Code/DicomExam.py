@@ -94,12 +94,8 @@ class DicomExam:
         # Load DICOM series from directory
         self._load_series()
         
-        # Set time frames based on loaded series
-        if self.num_series == 1:
-            self.time_frames = self.series[0].frames
-        else:
-            print("WARNING: Segmentation and mesh generation for multiple series not implemented!")
-            sys.exit()
+        self.time_frames = self.series[0].frames
+
 
     def _load_series(self):
         """
@@ -350,6 +346,49 @@ class DicomExam:
                                 Mode 1: use only slices withing LV for center calculation
         """
 
+        #for series in self:
+            # with open(f'{series.name}_XYZs.pkl', 'rb') as f:
+            #     series.XYZs = pickle.load(f)
+
+        init_mode = 1
+        if init_mode == 0:
+            print("init mode is 0")
+            all_slices = []
+            for s in self:
+                all_slices.extend(s.XYZs)
+            grid = np.concatenate(all_slices)
+            self.center = np.mean(grid, axis=0)
+			
+
+        elif init_mode == 1:
+            print("init mode is 1")
+            all_slices = []
+            for s in self:
+                if s.view == 'SAX':
+                    
+                    if s.slice_above_valveplane is None:
+                        all_slices.extend(s.XYZs)
+                    else:
+                        for k in range(len(s.XYZs)):
+                            if not s.slice_above_valveplane[0,k]:
+                                print(k)
+                                all_slices.append(s.XYZs[k])
+                else:
+                    all_slices.extend(s.XYZs)
+            grid = np.concatenate(all_slices)
+            print("Grid shape:")
+            print(grid.shape)
+            self.center = np.mean(grid, axis=0)
+            print(self.center)
+
+        print(center_shift)
+        if center_shift is not None:
+            self.center -= center_shift
+        print("After shift")
+        print(self.center)
+
+
+
         all_slices = []
         for s in self:
             all_slices.extend(s.XYZs)
@@ -357,130 +396,245 @@ class DicomExam:
         grid = np.concatenate(all_slices)
         self.center = np.mean(grid, axis=0)
 
+        print(self.center)
+
+        print(center_shift)
         #Apply manual center shift if provided
         if center_shift is not None:
             self.center -= center_shift
+        print("after shift")
+        print(self.center)
 
-        # Initialize landmark lists for averaging across series
-        self.vpc, self.sax_normal, self.rv_center  = [], [], []
-        
-        # Process each SAX series
-        for series in self:
-            if series.view != 'SAX':
-                continue
-                
-            if series_to_use != 'all' and series.name not in series_to_use:
-                continue
 
-            # Calculate valve plane center
-            if series.slice_above_valveplane is None:
-                # Use first slice if valve plane not estimated
-                self.vpc.append(np.mean(series.XYZs[0], axis=0) - self.center)
-            else:
-                # Use first slice within LV
-                for k in range(len(series.XYZs)):
-                    if (not series.slice_above_valveplane[0, k] and 
-                        not np.sum(series.data[0, k]) == 0):
-                        self.vpc.append(np.mean(series.XYZs[k], axis=0) - self.center)
-                        break
+        self.vpc, self.sax_normal, self.rv_center = [], [], [] #make an array and then take average to handel the case of multiple SAX series
+        for s in self:
+            s.uncertainty = None
 
-            # Fallback if no suitable slice found
-            if len(self.vpc) == 0:
-                self.vpc.append(np.mean(series.XYZs[0], axis=0) - self.center)
+            if s.view == 'SAX':
 
-            # Calculate short-axis normal vector
-            X_xyz = series.orientation[3:]
-            Y_xyz = series.orientation[:3]
-            self.sax_normal.append(np.cross(Y_xyz, X_xyz))
-
-            #get center of RV (relative to self.center):
-            rv_xyzs = []
-            for j in range(s.prepped_seg.shape[0]):
-                
-                RV = (s.prepped_seg[j] == 1)
-                
-                if np.sum(RV) == 0:
+                if series_to_use != 'all' and s.name not in series_to_use:
                     continue
 
-            for i in range(len(RV)):
+                ### calculate the valve plane center (relative to self.center)
+                #if we haven't yet estimated the valve-plane position, just use the first slice in the SAX series
+                if s.slice_above_valveplane is None:
+                    self.vpc.append( np.mean(s.XYZs[0], axis=0) - self.center )
+                else: #otherwise, use the center of first (most basal) slice in the LV:
+                    for k in range(len(s.XYZs)):
+                        if not s.slice_above_valveplane[0,k] and not np.sum(s.data[0,k])==0:
+                            self.vpc.append( np.mean(s.XYZs[k], axis=0) - self.center )
+                            break
 
-                if s.slice_above_valveplane is not None and s.slice_above_valveplane[j,i] == 0:
-                    continue
-                
-                rv_xyzs.append(s.XYZs[i].reshape((self.sz,self.sz,3))[RV[i]==1])
+                if len(self.vpc) == 0: #catch the (strange) case where no slice seems to be in the LV
+                    self.vpc.append( np.mean(s.XYZs[0], axis=0) - self.center )
 
-            if len(rv_xyzs) > 0:
-                rv_xyzs = np.concatenate(rv_xyzs,axis=0)
-                rv_center = np.mean(rv_xyzs,axis=0) - self.center
-                self.rv_center.append( rv_center )
+                #short-axis normal:
+                Xxyz = s.orientation[3:]
+                Yxyz = s.orientation[:3]
+                self.sax_normal.append( np.cross(Yxyz,Xxyz) )
 
-        # Average landmarks across series
+                #get center of RV (relative to self.center):
+                rv_xyzs = []
+                for j in range(s.prepped_seg.shape[0]):
+                    
+                    RV = (s.prepped_seg[j] == 1)
+                    
+                    if np.sum(RV) == 0:
+                        continue
+                    
+                    for i in range(len(RV)):
+                        # if s.uncertainty is not None and np.mean(s.uncertainty[j,i],axis=-1) < 0.25:
+                        if s.uncertainty is not None and np.mean(s.uncertainty[j,i],axis=-1) > 0.75:
+                            # print(j, 'uncertain')
+                            continue
+                        if s.slice_above_valveplane is not None and s.slice_above_valveplane[j,i]:
+                            # print(j, 'slice_above_valveplane')
+                            continue
+
+                        # print(RV[i].shape)
+                        #rv_xyzs.append(s.XYZs[i].reshape((128,128,3))[RV[i]==1])
+                        rv_xyzs.append(s.XYZs[i].reshape((200,200,3))[RV[i]==1])
+                        #rv_xyzs.append(s.XYZs[i].reshape((64,64,3))[RV[i]==1])
+
+                if len(rv_xyzs) > 0:
+                    rv_xyzs = np.concatenate(rv_xyzs,axis=0)
+                    rv_center = np.mean(rv_xyzs,axis=0) - self.center
+                    self.rv_center.append( rv_center )
+
         if len(self.vpc) > 0:
             self.vpc = np.mean(self.vpc, axis=0)
             self.sax_normal = np.mean(self.sax_normal, axis=0)
             self.rv_center = np.mean(self.rv_center, axis=0)
         else:
-            print('WARNING: No SAX slices found for landmark calculation')
+            print('warning: no SAX slices found for calculating landamrks in estimateLandmarks()')
             self.vpc, self.sax_normal, self.rv_center, self.rv_direction = None, None, None, None
             return
 
-        # Calculate base center and distances from center
+        #calculate the center of the base as a point in 3D space
         max_dist_from_center = 0
         self.base_center = None
-        
-        for series in self:
-            if series.view != 'SAX':
-                continue
-                
-            series.distance_from_center = []
-            
-            for k in range(len(series.XYZs)):
-                # Center of current slice
-                slice_center = np.mean(series.XYZs[k], axis=0)
-                
-                # Normalize SAX normal vector
-                n = self.sax_normal / np.linalg.norm(self.sax_normal, 2)
-                
-                # Project slice center onto SAX normal line
-                intersection_point = (self.center + 
-                                    n * np.dot(slice_center - self.center, n))
-                
-                # Calculate distance from center along normal
-                dist_from_center = np.mean((intersection_point - self.center) / 
-                                         self.sax_normal)
+        for s in self:
+            if s.view == 'SAX':
 
-                series.distance_from_center.append(dist_from_center)
-                
-                # Track most basal slice
-                if dist_from_center > max_dist_from_center:
-                    self.base_center = slice_center
-                    max_dist_from_center = dist_from_center
+                s.distance_from_center = []
+                for k in range(len(s.XYZs)): #for each slice:
 
-        # Set default base center if none found
+                    x = np.mean(s.XYZs[k],axis=0) #center of slice
+                    u = self.center #center of volume
+                    n = self.sax_normal / np.linalg.norm(self.sax_normal, 2) #make sure normal is length 1
+
+                    #project the center of the slice onto the sax_normal line, passing up throuygh the volume center:
+                    intersection_point = u + n*np.dot(x - u, n)
+
+                    #calculate the ditance of this projected point fromn the center (positive--> more toward base, negative--> more toward apex)
+                    dist_fom_center = np.mean((intersection_point - self.center)/self.sax_normal)#all three dims should be the same, so we just take the mean
+                    s.distance_from_center.append( dist_fom_center )
+
+                    if dist_fom_center > max_dist_from_center:
+                        self.base_center = x
+                        max_dist_from_center = dist_fom_center
+
         if self.base_center is None:
-            for series in self:
-                if series.view == 'SAX':
-                    self.base_center = np.mean(series.XYZs[0], axis=0)
-                    break
+            for s in self:
+                if s.view == 'SAX':
+                    self.base_center = np.mean(s.XYZs[0],axis=0)
 
-        # Recursive call with center adjustment if needed
         if center_shift is None:
-            adjustment = self.sax_normal * (58 - max_dist_from_center)
-            self.estimate_landmarks(series_to_use=series_to_use, 
-                                  center_shift=adjustment, init_mode=init_mode)
-            return
+            self.estimate_landmarks(series_to_use=series_to_use, center_shift=self.sax_normal*(58-max_dist_from_center), init_mode=init_mode)
 
         rv_direction = self.rv_center / np.linalg.norm(self.rv_center)
         rv_direction_projected_on_sax_plane = rv_direction - np.dot(rv_direction, self.sax_normal) * self.sax_normal
         self.rv_direction = rv_direction_projected_on_sax_plane / np.linalg.norm(rv_direction_projected_on_sax_plane)
 
-        # Predict aortic valve position and direction
         self.predict_aortic_valve_position()
         if self.valve_center is not None:
             self.valve_center = self.valve_center - self.center
+            aortic_valve_direction = self.valve_center / np.linalg.norm(self.valve_center)
+            aortic_valve_direction_projected_on_sax_plane = aortic_valve_direction - np.dot(aortic_valve_direction, self.sax_normal) * self.sax_normal
+            self.aortic_valve_direction = aortic_valve_direction_projected_on_sax_plane / np.linalg.norm(aortic_valve_direction_projected_on_sax_plane)
+
+        print(self.center)
+
+        # # Initialize landmark lists for averaging across series
+        # self.vpc, self.sax_normal, self.rv_center  = [], [], []
+        
+        # # Process each SAX series
+        # for series in self:
+        #     if series.view != 'SAX':
+        #         continue
+                
+        #     if series_to_use != 'all' and series.name not in series_to_use:
+        #         continue
+
+        #     # Calculate valve plane center
+        #     if series.slice_above_valveplane is None:
+        #         # Use first slice if valve plane not estimated
+        #         self.vpc.append(np.mean(series.XYZs[0], axis=0) - self.center)
+        #     else:
+        #         # Use first slice within LV
+        #         for k in range(len(series.XYZs)):
+        #             if (not series.slice_above_valveplane[0, k] and 
+        #                 not np.sum(series.data[0, k]) == 0):
+        #                 self.vpc.append(np.mean(series.XYZs[k], axis=0) - self.center)
+        #                 break
+
+        #     # Fallback if no suitable slice found
+        #     if len(self.vpc) == 0:
+        #         self.vpc.append(np.mean(series.XYZs[0], axis=0) - self.center)
+
+        #     # Calculate short-axis normal vector
+        #     X_xyz = series.orientation[3:]
+        #     Y_xyz = series.orientation[:3]
+        #     self.sax_normal.append(np.cross(Y_xyz, X_xyz))
+
+        #     #get center of RV (relative to self.center):
+        #     rv_xyzs = []
+        #     for j in range(s.prepped_seg.shape[0]):
+                
+        #         RV = (s.prepped_seg[j] == 1)
+                
+        #         if np.sum(RV) == 0:
+        #             continue
+
+        #     for i in range(len(RV)):
+
+        #         if s.slice_above_valveplane is not None and s.slice_above_valveplane[j,i] == 0:
+        #             continue
+                
+        #         rv_xyzs.append(s.XYZs[i].reshape((self.sz,self.sz,3))[RV[i]==1])
+
+        #     if len(rv_xyzs) > 0:
+        #         rv_xyzs = np.concatenate(rv_xyzs,axis=0)
+        #         rv_center = np.mean(rv_xyzs,axis=0) - self.center
+        #         self.rv_center.append( rv_center )
+
+        # # Average landmarks across series
+        # if len(self.vpc) > 0:
+        #     self.vpc = np.mean(self.vpc, axis=0)
+        #     self.sax_normal = np.mean(self.sax_normal, axis=0)
+        #     self.rv_center = np.mean(self.rv_center, axis=0)
+        # else:
+        #     print('WARNING: No SAX slices found for landmark calculation')
+        #     self.vpc, self.sax_normal, self.rv_center, self.rv_direction = None, None, None, None
+        #     return
+
+        # # Calculate base center and distances from center
+        # max_dist_from_center = 0
+        # self.base_center = None
+        
+        # for series in self:
+        #     if series.view != 'SAX':
+        #         continue
+                
+        #     series.distance_from_center = []
             
-            # Calculate aortic valve direction projected onto SAX plane
-            aortic_direction = self.valve_center / np.linalg.norm(self.valve_center)
-            aortic_proj = (aortic_direction - 
-                          np.dot(aortic_direction, self.sax_normal) * self.sax_normal)
-            self.aortic_valve_direction = aortic_proj / np.linalg.norm(aortic_proj)
+        #     for k in range(len(series.XYZs)):
+        #         # Center of current slice
+        #         slice_center = np.mean(series.XYZs[k], axis=0)
+                
+        #         # Normalize SAX normal vector
+        #         n = self.sax_normal / np.linalg.norm(self.sax_normal, 2)
+                
+        #         # Project slice center onto SAX normal line
+        #         intersection_point = (self.center + 
+        #                             n * np.dot(slice_center - self.center, n))
+                
+        #         # Calculate distance from center along normal
+        #         dist_from_center = np.mean((intersection_point - self.center) / 
+        #                                  self.sax_normal)
+
+        #         series.distance_from_center.append(dist_from_center)
+                
+        #         # Track most basal slice
+        #         if dist_from_center > max_dist_from_center:
+        #             self.base_center = slice_center
+        #             max_dist_from_center = dist_from_center
+
+        # # Set default base center if none found
+        # if self.base_center is None:
+        #     for series in self:
+        #         if series.view == 'SAX':
+        #             self.base_center = np.mean(series.XYZs[0], axis=0)
+        #             break
+
+        # # Recursive call with center adjustment if needed
+        # if center_shift is None:
+        #     adjustment = self.sax_normal * (58 - max_dist_from_center)
+        #     self.estimate_landmarks(series_to_use=series_to_use, 
+        #                           center_shift=adjustment, init_mode=init_mode)
+        #     return
+
+        # rv_direction = self.rv_center / np.linalg.norm(self.rv_center)
+        # rv_direction_projected_on_sax_plane = rv_direction - np.dot(rv_direction, self.sax_normal) * self.sax_normal
+        # self.rv_direction = rv_direction_projected_on_sax_plane / np.linalg.norm(rv_direction_projected_on_sax_plane)
+
+        # # Predict aortic valve position and direction
+        # self.predict_aortic_valve_position()
+        # if self.valve_center is not None:
+        #     self.valve_center = self.valve_center - self.center
+            
+        #     # Calculate aortic valve direction projected onto SAX plane
+        #     aortic_direction = self.valve_center / np.linalg.norm(self.valve_center)
+        #     aortic_proj = (aortic_direction - 
+        #                   np.dot(aortic_direction, self.sax_normal) * self.sax_normal)
+        #     self.aortic_valve_direction = aortic_proj / np.linalg.norm(aortic_proj)

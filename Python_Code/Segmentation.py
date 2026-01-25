@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 # Local imports
 from Python_Code.Utilis.pytorch_segmentation_utils import (
-    produce_segmentation_at_required_resolution, simple_shape_correction
+    produce_segmentation_at_required_resolution, simple_shape_correction,
 )
 from Python_Code.Utilis.visualizeDICOM import planeToXYZ, to3Ch
 
@@ -57,13 +57,15 @@ def segment(dicom_exam,margin_factor=2):
         segmented_data, segmentation_mask, center_x, center_y = produce_segmentation_at_required_resolution(
             series.prepped_data, series.pixel_spacing, is_sax
         )
+
         # Resample segmentation back to original resolution
         # Order=0 ensures label preservation (nearest neighbor interpolation)
         zoom_factors = (1, 1, 1 / series.pixel_spacing[1], 1 / series.pixel_spacing[2])
         series.seg = zoom(segmentation_mask, zoom_factors, order=0)
         
         # Calculate optimal crop size based on myocardium segmentationx
-        crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y,margin_factor=margin_factor)
+        #crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y,margin_factor=margin_factor)
+        crop_size = 200
         crop_sizes.append(crop_size)
 
         # Ensure crop region stays within image bounds
@@ -87,16 +89,17 @@ def segment(dicom_exam,margin_factor=2):
                 series.orientation,  # DICOM orientation vectors
                 [1, 1]  # Pixel spacing in plane
             )
+
             
             # Crop coordinate grids to match segmentation crop
             X_cropped = X[center_y:center_y + crop_size, center_x:center_x + crop_size]
             Y_cropped = Y[center_y:center_y + crop_size, center_x:center_x + crop_size]
             Z_cropped = Z[center_y:center_y + crop_size, center_x:center_x + crop_size]
+
             
             # Stack coordinates and flatten for easy access
             xyz_coords = np.stack([X_cropped.ravel(), Y_cropped.ravel(), Z_cropped.ravel()], axis=1)
 
-            # print(np.concatenate([X.reshape((sz**2,1)), Y.reshape((sz**2,1)), Z.reshape((sz**2,1))]).sum())
             series.XYZs.append(xyz_coords)
 
         # Crop and transpose data to match expected format (time, slice, y, x)
@@ -119,7 +122,6 @@ def segment(dicom_exam,margin_factor=2):
 
     #calculate crop size for all series in dicom exam
     dicom_exam.sz = int(np.mean(crop_sizes))
-
 
 def _calculate_optimal_crop_size(segmentation, center_x, center_y, margin_factor=2):
     """
