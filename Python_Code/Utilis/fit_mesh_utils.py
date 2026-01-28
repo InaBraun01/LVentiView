@@ -348,12 +348,9 @@ def set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se):
     # Calculate rotation to align mesh SAX normal with DICOM SAX normal
     rotM = getRotationMatrix(initial_mesh_sax_normal, dicom_exam.sax_normal)
     new_mesh_rv_direction = np.dot(rotM, initial_mesh_rv_direction)
-    print(new_mesh_rv_direction)
 
     # Determine valve direction from DICOM data
     valve_direction = dicom_exam.rv_direction if dicom_exam.valve_center is None else dicom_exam.aortic_valve_direction
-
-    print(valve_direction)
     
 
     # # Calculate additional rotation for RV direction alignment
@@ -362,7 +359,6 @@ def set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se):
 
     # Convert to Euler angles
     euler_rot = np.array(Rotation.from_matrix(rotM).as_euler('xyz'))
-    print(euler_rot)
 
     # Apply rotation to models
     with torch.no_grad():
@@ -606,6 +602,13 @@ def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel,
     d0_values = []
     d1_values = []
 
+    d0_values_series_1 = []
+    d1_values_series_1 = []
+
+    d0_values_series_2 = []
+    d1_values_series_2 = []
+
+
     for index, time_step in enumerate(dicom_exam.time_frames_to_fit):
     
         d0 = dice_loss(outputs[index][:,:1], tensor_labels[:,:1,:,:,:,time_step])  # Myocardium
@@ -613,6 +616,18 @@ def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel,
 
         d0_values.append(d0.item())
         d1_values.append(d1.item())
+
+        d0_series_1 = dice_loss(outputs[index][:,:1][:,:,:,:,:dicom_exam.series[0].slices], tensor_labels[:,:1,:,:,:,time_step][:,:,:,:,:dicom_exam.series[0].slices])  # Myocardium
+        d1_series_1 = dice_loss(outputs[index][:,1:][:,:,:,:,:dicom_exam.series[0].slices], tensor_labels[:,1:,:,:,:,time_step][:,:,:,:,:dicom_exam.series[0].slices])  # Blood pool
+
+        d0_values_series_1.append(d0_series_1.item())
+        d1_values_series_1.append(d1_series_1.item())
+
+        d0_series_2 = dice_loss(outputs[index][:,:1][:,:,:,:,dicom_exam.series[0].slices:], tensor_labels[:,:1,:,:,:,time_step][:,:,:,:,dicom_exam.series[0].slices:])  # Myocardium
+        d1_series_2 = dice_loss(outputs[index][:,1:][:,:,:,:,dicom_exam.series[0].slices:], tensor_labels[:,1:,:,:,:,time_step][:,:,:,:,dicom_exam.series[0].slices:])  # Blood pool
+
+        d0_values_series_2.append(d0_series_2.item())
+        d1_values_series_2.append(d1_series_2.item())
 
         # Store rendered and sliced mesh in DICOM exam object for visulization
         ones_input = torch.Tensor(np.ones((1, 1))).to(device)
@@ -643,8 +658,8 @@ def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel,
                 writer = csv.writer(file)
                 for coefficient in rescale_modes[index]:
                     writer.writerow([coefficient])
-    
-    return d0_values ,d1_values
+
+    return d0_values ,d1_values, d0_values_series_1, d1_values_series_1, d0_values_series_2, d1_values_series_2
 
 
 def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input, index):

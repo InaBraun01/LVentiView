@@ -486,46 +486,56 @@ def estimate_MRI_orientation(dicom_exam):
                    The MRI_orientation attribute will be updated with the result.
 
     """
-    #collect diameters 
-    slice_diameter = []
-    for i in range(dicom_exam.series[0].prepped_seg.shape[1]):
-        slice = dicom_exam.series[0].prepped_seg[0,i,:,:]
-        myo_mask = np.where(slice == 2, 1, 0)
 
-        center_y, center_x = center_of_mass(myo_mask)
-        cy, cx = int(np.round(center_y)), int(np.round(center_x))
+    for series in dicom_exam:
+        if series.view != 'SAX':
+            continue  # Only process SAX series
+        
+        print(series.name)
+        #collect diameters 
+        slice_diameter = []
+        for i in range(series.prepped_seg.shape[1]):
+            slice = series.prepped_seg[0,i,:,:]
+            myo_mask = np.where(slice == 2, 1, 0)
 
-        diameters = []
+            center_y, center_x = center_of_mass(myo_mask)
+            cy, cx = int(np.round(center_y)), int(np.round(center_x))
 
-        # Horizontal diameter
-        h_pixels = np.where(myo_mask[cy, :] == 1)[0]
-        if len(h_pixels) > 0:
-            diameters.append(h_pixels[-1] - h_pixels[0])
-        
-        # Vertical diameter  
-        v_pixels = np.where(myo_mask[:, cx] == 1)[0]
-        if len(v_pixels) > 0:
-            diameters.append(v_pixels[-1] - v_pixels[0])
-        
-        # Diagonal diameters
-        d1_pixels = np.where(np.diag(myo_mask) == 1)[0]
-        if len(d1_pixels) > 0:
-            diameters.append((d1_pixels[-1] - d1_pixels[0]) * np.sqrt(2))
-        
-        d2_pixels = np.where(np.diag(np.rot90(myo_mask)) == 1)[0]
-        if len(d2_pixels) > 0:
-            diameters.append((d2_pixels[-1] - d2_pixels[0]) * np.sqrt(2))
-        
-        slice_diameter.append(np.mean(diameters))
-    
-    #compare diameters in first and second half of the series
-    n = dicom_exam.series[0].prepped_seg.shape[1]
-    mid = n // 2
-    start_avg = sum(slice_diameter[:mid]) / mid
-    end_avg = sum(slice_diameter[mid:]) / (n - mid)
+            diameters = []
 
-    #assign orientation to MRI data
-    if start_avg > end_avg:
-        dicom_exam.MRI_orientation = "base_top"
-    elif start_avg < end_avg:
-        dicom_exam.MRI_orientation = "apex_top"
+            # Horizontal diameter
+            h_pixels = np.where(myo_mask[cy, :] == 1)[0]
+            if len(h_pixels) > 0:
+                diameters.append(h_pixels[-1] - h_pixels[0])
+            
+            # Vertical diameter  
+            v_pixels = np.where(myo_mask[:, cx] == 1)[0]
+            if len(v_pixels) > 0:
+                diameters.append(v_pixels[-1] - v_pixels[0])
+            
+            # Diagonal diameters
+            d1_pixels = np.where(np.diag(myo_mask) == 1)[0]
+            if len(d1_pixels) > 0:
+                diameters.append((d1_pixels[-1] - d1_pixels[0]) * np.sqrt(2))
+            
+            d2_pixels = np.where(np.diag(np.rot90(myo_mask)) == 1)[0]
+            if len(d2_pixels) > 0:
+                diameters.append((d2_pixels[-1] - d2_pixels[0]) * np.sqrt(2))
+            
+            slice_diameter.append(np.mean(diameters))
+        
+        #compare diameters in first and second half of the series
+        n = series.prepped_seg.shape[1]
+        mid = n // 2
+        start_avg = np.nansum(slice_diameter[:mid]) / mid
+        end_avg = np.nansum(slice_diameter[mid:]) / (n - mid)
+
+        print( f"Start avg diameter: {start_avg}, End avg diameter: {end_avg}" )
+        
+        #assign orientation to MRI data
+        if start_avg > end_avg:
+            print("base_top")
+            dicom_exam.MRI_orientation = "base_top"
+        elif start_avg < end_avg:
+            print("apex_top")
+            dicom_exam.MRI_orientation = "apex_top"

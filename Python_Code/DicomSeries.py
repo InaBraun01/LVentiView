@@ -27,7 +27,7 @@ class DicomSeries(object):
         orientation (np.ndarray): DICOM image orientation vectors
     """
     
-    def __init__(self, full_path, id_string=None):
+    def __init__(self, full_path, z_height_remove=None, time_frame_remove = None ,id_string=None):
         """
         Initialize DICOM series from folder path.
         
@@ -39,6 +39,8 @@ class DicomSeries(object):
         self.full_path = full_path
         self.series_folder_name = path_leaf(full_path).lower().split('.')[0]
         self.name = self.series_folder_name if id_string is None else id_string
+        self.z_height_remove = z_height_remove
+        self.time_frame_remove = time_frame_remove
 
         if full_path.endswith('nii.gz'):
             print('loading series from NIfTI')
@@ -52,7 +54,7 @@ class DicomSeries(object):
             # Load DICOM data and metadata
             (data, pixel_spacing, image_ids, dicom_details,
             slice_locations, trigger_times, image_positions,
-            is3D, multifile) = dataArrayFromDicom(full_path)
+            is3D, multifile) = dataArrayFromDicom(full_path, self.z_height_remove, self.time_frame_remove)
         
             # Store DICOM metadata
             self.orientation = np.array(list(dicom_details['ImageOrientation']))
@@ -71,6 +73,7 @@ class DicomSeries(object):
         # Initialize processing variables
         self.prepped_data = self.data  # Will be modified during preprocessing
         self.cleaned_data = self.data  #Will be modified as the data is cleaned
+        self.prepped_seg = None  # Segmentation for prepped data
         self.frames = self.data.shape[0]  # Number of cardiac phases
         self.slices = self.data.shape[1]  # Number of image slices
         self.seg = None  # Segmentation mask (populated later)

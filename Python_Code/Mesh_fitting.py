@@ -71,10 +71,6 @@ def fit_mesh(dicom_exam,
     if series_to_exclude is None:
         series_to_exclude = []
 
-    # Enforce single series fitting
-    if len(dicom_exam.series) != 1:
-        print(f"Mesh fitting only works with one series. Found {len(dicom_exam.series)}.")
-
     
     dicom_exam.series_to_exclude = [s.lower() for s in series_to_exclude]
 
@@ -177,18 +173,46 @@ def fit_mesh(dicom_exam,
 
         # Save outputs and Dice score
         with torch.no_grad():
-            myo_end_dice, bp_end_dice = ut.save_results_post_training(
+            d0_values ,d1_values, d0_values_series_1, d1_values_series_1, d0_values_series_2, d1_values_series_2= ut.save_results_post_training(
                 dicom_exam, outputs, eli,se, sz, use_bp_channel, 
                               -mesh_origin, learned_inputs, tensor_labels)
             
             # Create a DataFrame
-            df_end_dice = pd.DataFrame({'Myocardium Dice': myo_end_dice, 'Blood pool dice': bp_end_dice})
-            fname = os.path.join(dicom_exam.folder['base'], 'end_dice.csv')
+            df_end_dice_both = pd.DataFrame({'Myocardium Dice': d0_values, 'Blood pool dice': d1_values})
+            fname_both = os.path.join(dicom_exam.folder['base'], 'both_end_dice.csv')
             # Save to CSV
-            df_end_dice.to_csv(fname, index=False)
+            df_end_dice_both.to_csv(
+                fname_both,
+                mode='a',
+                index=False,
+                header=not os.path.exists(fname_both)
+            )
+
+
+            # Create a DataFrame
+            df_end_dice_1 = pd.DataFrame({'Myocardium Dice': d0_values_series_1, 'Blood pool dice': d1_values_series_1})
+            fname_1 = os.path.join(dicom_exam.folder['base'], f'{dicom_exam.series[0].view}_end_dice.csv')
+            # Save to CSV
+            df_end_dice_1.to_csv(
+                fname_1,
+                mode='a',
+                index=False,
+                header=not os.path.exists(fname_1)
+            )
+
+            # Create a DataFrame
+            df_end_dice_2 = pd.DataFrame({'Myocardium Dice': d0_values_series_2, 'Blood pool dice': d1_values_series_2})
+            fname_2 = os.path.join(dicom_exam.folder['base'], f'{dicom_exam.series[1].view}_end_dice.csv')
+            # Save to CSV
+            df_end_dice_2.to_csv(
+                fname_2,
+                mode='a',
+                index=False,
+                header=not os.path.exists(fname_2)
+            )
 
 
     # Final processing: mask generation for fitted meshes
     prepMeshMasks(dicom_exam)
 
-    return df_end_dice
+    return df_end_dice_both

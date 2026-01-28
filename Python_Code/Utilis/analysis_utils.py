@@ -65,27 +65,30 @@ def compute_cardiac_parameters(dicom_exam, mask_type: str = 'seg') -> None:
         print('Function requires exams with more than 1 time frame')
         return
 
-    # Initialize measurement containers
-    measurements = {
-        'myo_volumes': [],
-        'bp_volumes': [],
-        'lengths': []
-    }
 
     for series in dicom_exam:
+
+        # Initialize measurement containers
+        measurements = {
+            'myo_volumes': [],
+            'bp_volumes': [],
+            'lengths': []
+        }
+
         if series.name in dicom_exam.series_to_exclude:
             continue
         masks, output_folders = _prepare_masks_and_folders(
             series, dicom_exam, mask_type
         )
 
+
         if series.view == 'SAX':
             _process_sax_series(series, masks, measurements)
         else:  # LAX view
-            _process_lax_series(series, masks, measurements, dicom_exam.time_frames)
+            continue
 
         # Generate outputs
-        _generate_outputs(measurements, series.view, output_folders, mask_type)
+        _generate_outputs(measurements, series.view, output_folders, mask_type, series.name)
 
 
 def _prepare_masks_and_folders(series, dicom_exam, mask_type: str) -> Tuple:
@@ -115,16 +118,19 @@ def _prepare_masks_and_folders(series, dicom_exam, mask_type: str) -> Tuple:
 
 def _process_sax_series(series, masks, measurements) -> None:
     """Process short-axis (SAX) series data."""
+
     measurements['bp_volumes'].append([])
     measurements['myo_volumes'].append([])
 
     pixel_volume = _calculate_pixel_volume(series)
+    print(pixel_volume)
 
     for time_frame in range(series.frames):
         # Calculate volumes
         myo_vol, bp_vol = _calculate_volumes_sax(
             masks, time_frame, series.slices, pixel_volume
         )
+
         measurements['myo_volumes'][-1].append(myo_vol)
         measurements['bp_volumes'][-1].append(bp_vol)
 
@@ -133,37 +139,6 @@ def _process_sax_series(series, masks, measurements) -> None:
         if measurements[key]:
             measurements[key] = np.nanmean(np.array(measurements[key]), axis=0)
 
-
-def _process_lax_series(series, masks, measurements, time_frames: int) -> None:
-    """Process long-axis (LAX) series data."""
-    measurements['myo_volumes'].append([])
-    measurements['bp_volumes'].append([])
-    measurements['lengths'].append([])
-
-    central_slice = series.slices // 2
-    pixel_volume = _calculate_pixel_volume(series)
-
-    for time_frame in range(time_frames):
-        # LAX view only uses central slice for length calculation
-        myo = (masks[time_frame, central_slice] == 2).astype(int) * pixel_volume
-        bp = (masks[time_frame, central_slice] == 3).astype(int) * pixel_volume
-
-        # Calculate volumes
-        myo_vol = np.sum(myo)
-        bp_vol = np.sum(bp)
-
-        measurements['myo_volumes'][-1].append(myo_vol if myo_vol != 0 else np.nan)
-        measurements['bp_volumes'][-1].append(bp_vol if bp_vol != 0 else np.nan)
-
-        # Calculate length using skeletonization
-        myo_mask = (masks[time_frame, central_slice] == 2).astype(int)
-        myo_length = np.sum(skeletonize(myo_mask))* series.pixel_spacing[2]
-        measurements['lengths'][-1].append(myo_length if myo_length != 0 else np.nan)
-
-    # Average across all series
-    for key in ['myo_volumes', 'bp_volumes', 'lengths']:
-        if measurements[key]:
-            measurements[key] = np.nanmean(np.array(measurements[key]), axis=0)
 
 
 def _calculate_volumes_sax(masks, time_frame: int, num_slices: int, 
@@ -191,7 +166,7 @@ def _calculate_pixel_volume(series) -> float:
 
 
 def _generate_outputs(measurements, view: str, output_folders: dict, 
-                     mask_type: str) -> None:
+                     mask_type: str, series_name) -> None:
     """Generate CSV outputs and plots from measurements."""
     if view == 'SAX':
         df = pd.DataFrame({
@@ -202,19 +177,8 @@ def _generate_outputs(measurements, view: str, output_folders: dict,
             "Volume of Myocardium [ml]",
             "Volume of Blood Pool [ml]"
         ]
-    else:  # LAX
-        df = pd.DataFrame({
-            'bp_volume': measurements['bp_volumes'],
-            'myo_volume': measurements['myo_volumes'],
-            'myo_length': measurements['lengths']
-        })
-        titles = [
-            "Volume of Blood Pool [ml]",
-            "Volume of Myocardium [ml]",
-            "Length of Myocardium [mm]"
-        ]
     
-    filename = 'simpson_volumes.csv'
+    filename = f'{series_name}_simpson_volumes.csv'
 
     # Generate plots
     for i, col in enumerate(df.columns):
@@ -222,9 +186,10 @@ def _generate_outputs(measurements, view: str, output_folders: dict,
             df, 
             file_name=col,
             output_folder=output_folders['plots'],
+            series_name=series_name,
             title=titles[i],
             y_value=col,
-            y_label=titles[i]
+            y_label=titles[i],
         )
 
     # Save measurements to CSV
@@ -241,7 +206,7 @@ def _generate_outputs(measurements, view: str, output_folders: dict,
         {'Parameter': 'SV', 'Value': cardiac_params['SV'], 'Time_step': None}
     ])
     param_df.to_csv(
-        os.path.join(output_folders['analysis'], 'ED_ES_state.csv'), 
+        os.path.join(output_folders['analysis'], f'{series_name}_ED_ES_state.csv'), 
         index=False
     )
 
@@ -264,7 +229,7 @@ def _calculate_cardiac_parameters(bp_volumes: np.ndarray) -> dict:
 
 
 def plot_time_series(data: pd.DataFrame, y_value: str, file_name: str, 
-                    output_folder: str, title: str = "Time Series",
+                    output_folder: str, series_name = None, title: str = "Time Series",
                     y_label: str = "Value", x_label: str = "Time frame",
                     line_color: str = "#3498db", scatter_color: str = "#ec6564",
                     alpha: float = 0.7) -> None:
@@ -315,13 +280,18 @@ def plot_time_series(data: pd.DataFrame, y_value: str, file_name: str,
     plt.legend(frameon=True, fancybox=True, shadow=True)
     plt.tight_layout()
 
+    if series_name:
+        filename =f"{series_name}_{file_name}"
+    else:
+        filename = file_name
+
     # Save plots
     plt.savefig(
-        os.path.join(output_folder, f'{file_name}.pdf'), 
+        os.path.join(output_folder, f'{filename}.pdf'), 
         dpi=300, bbox_inches='tight'
     )
     plt.savefig(
-        os.path.join(output_folder, f'{file_name}.svg'), 
+        os.path.join(output_folder, f'{filename}.svg'), 
         format='svg'
     )
     plt.close(fig)
@@ -517,66 +487,74 @@ def seg_masks_compute_thickness_map(
         None: Function saves thickness maps to disk and creates visualizations
 
     """
-    output_folder = dicom_exam.folder['seg_thickness']
-    
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    
-    for time in range(dicom_exam.time_frames):
-        seg_stack = dicom_exam.series[0].prepped_seg[time, :, :, :]
-        Z, H, W = seg_stack.shape
-        
-        # Initialize thickness map with NaN values
-        thickness_map = np.full((Z, n_theta_bins), np.nan)
-        
-        # Create azimuthal bins from 0 to 2π
-        theta_bins = np.linspace(0, 2 * np.pi, n_theta_bins + 1)
-        
-        # Calculate center from basal or apical plane based on MRI orientation
-        cx, cy = _calculate_centroid_from_reference_slice(
-            dicom_exam, seg_stack, label_of_interest
-        )
-        
-        # Process each axial slice
-        for z in range(Z):
-            seg_slice = seg_stack[z]
-            
-            # Extract points of interest from segmentation
-            ys, xs = np.where(seg_slice == label_of_interest)
-            
-            if len(xs) == 0:
-                continue  # Skip slices with no segmented regions
-            
-            # Apply pixel spacing to convert to physical coordinates
-            xs_scaled = xs * dicom_exam.series[0].pixel_spacing[1]
-            ys_scaled = ys * dicom_exam.series[0].pixel_spacing[2]
-            
-            # Convert to polar coordinates relative to centroid
-            x_shifted = xs_scaled - cx
-            y_shifted = ys_scaled - cy
-            
-            r = np.sqrt(x_shifted**2 + y_shifted**2)
-            theta = np.arctan2(y_shifted, x_shifted)  # Range: [-π, π]
-            
-            # Normalize theta to [0, 2π] range
-            theta = (theta + 2 * np.pi) % (2 * np.pi)
-            
-            # Assign theta values to discrete bins
-            theta_idx = np.digitize(theta, theta_bins) - 1  # Convert to zero-based indexing
-            
-            # Calculate thickness for each angular bin
-            for ti in range(n_theta_bins):
-                mask = (theta_idx == ti)
-                if not np.any(mask):
-                    continue
+
+    for series in dicom_exam.series:
+
+        if series.view == 'SAX':
+            print(series.name)
+            print(series.view)
                 
-                r_values = r[mask]
-                thickness = r_values.max() - r_values.min()
-                thickness_map[z, ti] = thickness
-        
-        # Save and visualize results
-        seg_mask_plot_thickness_map(thickness_map, time, output_folder)
-        np.save(os.path.join(output_folder, f"thickness_map_{time}"), thickness_map)
+            output_folder = dicom_exam.folder['seg_thickness']
+            
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+            
+            for time in range(dicom_exam.time_frames):
+                seg_stack = dicom_exam.series[0].prepped_seg[time, :, :, :]
+                Z, H, W = seg_stack.shape
+                
+                # Initialize thickness map with NaN values
+                thickness_map = np.full((Z, n_theta_bins), np.nan)
+                
+                # Create azimuthal bins from 0 to 2π
+                theta_bins = np.linspace(0, 2 * np.pi, n_theta_bins + 1)
+
+                
+                # Calculate center from basal or apical plane based on MRI orientation
+                cx, cy = _calculate_centroid_from_reference_slice(
+                    dicom_exam, seg_stack, label_of_interest
+                )
+                
+                # Process each axial slice
+                for z in range(Z):
+                    seg_slice = seg_stack[z]
+                    
+                    # Extract points of interest from segmentation
+                    ys, xs = np.where(seg_slice == label_of_interest)
+                    
+                    if len(xs) == 0:
+                        continue  # Skip slices with no segmented regions
+                    
+                    # Apply pixel spacing to convert to physical coordinates
+                    xs_scaled = xs * dicom_exam.series[0].pixel_spacing[1]
+                    ys_scaled = ys * dicom_exam.series[0].pixel_spacing[2]
+                    
+                    # Convert to polar coordinates relative to centroid
+                    x_shifted = xs_scaled - cx
+                    y_shifted = ys_scaled - cy
+                    
+                    r = np.sqrt(x_shifted**2 + y_shifted**2)
+                    theta = np.arctan2(y_shifted, x_shifted)  # Range: [-π, π]
+                    
+                    # Normalize theta to [0, 2π] range
+                    theta = (theta + 2 * np.pi) % (2 * np.pi)
+                    
+                    # Assign theta values to discrete bins
+                    theta_idx = np.digitize(theta, theta_bins) - 1  # Convert to zero-based indexing
+                    
+                    # Calculate thickness for each angular bin
+                    for ti in range(n_theta_bins):
+                        mask = (theta_idx == ti)
+                        if not np.any(mask):
+                            continue
+                        
+                        r_values = r[mask]
+                        thickness = r_values.max() - r_values.min()
+                        thickness_map[z, ti] = thickness
+                
+                # Save and visualize results
+                seg_mask_plot_thickness_map(thickness_map, time, output_folder)
+                np.save(os.path.join(output_folder, f"thickness_map_{time}"), thickness_map)
 
 
 def _calculate_centroid_from_reference_slice(
@@ -595,6 +573,7 @@ def _calculate_centroid_from_reference_slice(
     Returns:
         Tuple[float, float]: Centroid coordinates (cx, cy) in physical units
     """
+
     if dicom_exam.MRI_orientation == "base_top":
         reference_slice = seg_stack[0]  # Basal slice
     elif dicom_exam.MRI_orientation == "apex_top":

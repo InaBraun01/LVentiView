@@ -49,6 +49,24 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
 
     for index,time_step in enumerate(dicom_exam.time_frames_to_fit):
 
+        # # print(pred[index][:,:1,:,:,4:10].shape)
+        # # print((target[:,:1,:,:,4:10,time_step]+ target[:,:1,:,:,13:0,time_step]).shape)
+
+        # part1_pred = pred[index][:,:,:,:,4:10]
+        # part2_pred = pred[index][:,:,:,:,13:20] 
+        # cropped_pred = torch.cat([part1_pred, part2_pred], dim=4)
+
+        # part1_target = target[:, :, :, :, 4:10, time_step]
+        # part2_target = target[:, :, :, :, 13:20, time_step]  # adjust upper bound
+
+        # cropped_target = torch.cat([part1_target, part2_target], dim=4)
+
+        # #calculate dice loss for myocardium
+        # d0 = one_minus_dice_loss(cropped_pred[:,:1], cropped_target[:,:1], slice_weights) * myo_weight 
+        # #calculate dice loss for blood pool
+        # d1 = one_minus_dice_loss(cropped_pred[:,1:], cropped_target[:,1:], slice_weights) * bp_weight  
+
+
         #calculate dice loss for myocardium
         d0 = one_minus_dice_loss(pred[index][:,:1], target[:,:1,:,:,:,time_step], slice_weights) * myo_weight 
         #calculate dice loss for blood pool

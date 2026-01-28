@@ -60,7 +60,7 @@ class DicomExam:
         center (np.ndarray): Overall center of the cardiac volume
     """
     
-    def __init__(self, base_dir, output_folder, id_string=None):
+    def __init__(self, base_dir, output_folder,dict_z_slices_removed = None ,dict_time_frames_removed = None, id_string=None):
         """
         Initialize a DicomExam object.
         
@@ -75,6 +75,8 @@ class DicomExam:
         self.series = []
         self.series_names = []
         self.output_folder = output_folder
+        self.dict_z_slices_removed = dict_z_slices_removed
+        self.dict_time_frames_removed = dict_time_frames_removed
         
         # Processing attributes
         self.sax_slice_intersections = None
@@ -90,6 +92,7 @@ class DicomExam:
         self.aortic_valve_direction = None
         self.base_center = None
         self.center = None
+
 
         # Load DICOM series from directory
         self._load_series()
@@ -107,13 +110,29 @@ class DicomExam:
         ordered_series = sort_folder_names(os.listdir(self.base_dir))
         ordered_series = [x for x in ordered_series if not x.startswith('.')]
 
+        if self.dict_time_frames_removed is None:
+            self.dict_time_frames_removed = {}
+
+        for series_dir in ordered_series:
+            if series_dir not in self.dict_time_frames_removed:
+                self.dict_time_frames_removed[series_dir] = None
+
+        if self.dict_z_slices_removed is None:
+            self.dict_z_slices_removed = {}
+
+        for series_dir in ordered_series:
+            if series_dir not in self.dict_z_slices_removed:
+                self.dict_z_slices_removed[series_dir] = None
+
+
         # Load each series (excluding RV series)
         for series_dir in ordered_series:
+            print(series_dir)
             full_path = os.path.join(self.base_dir, series_dir)
             
             # Skip RV-specific series
             if 'rv' not in series_dir.lower():
-                ds = DicomSeries(full_path)
+                ds = DicomSeries(full_path, self.dict_z_slices_removed[series_dir],self.dict_time_frames_removed[series_dir])
                 
                 # Only add series with actual data
                 if np.prod(ds.data.shape) > 1:
@@ -176,36 +195,98 @@ class DicomExam:
         """
         for series in self:
 
-            if remove_time_steps == []:
-                remove_time_steps = None
+            if series.view not in ['SAX', 'unknown']:
 
-            if remove_z_slices == []:
-                remove_z_slices = None
+                if remove_time_steps == []:
+                    remove_time_steps = None
 
-            if remove_time_steps:
-                remove_time_steps = [x - 1 for x in remove_time_steps]
-                incomplete_frames = clean_time_frames(series, slice_threshold,remove_time_steps)
+                if remove_z_slices == []:
+                    remove_z_slices = None
 
-            else:
-                incomplete_frames = clean_time_frames(series, slice_threshold)
+                # if remove_time_steps:
+                #     remove_time_steps = [x - 1 for x in remove_time_steps]
+                #     incomplete_frames = clean_time_frames(series, slice_threshold,remove_time_steps)
 
-            if remove_z_slices:
-                remove_z_slices = [x - 1 for x in remove_z_slices]
-                clean_slices_apex(series, percentage_apex,remove_z_slices)
+                # else:
+                #     incomplete_frames = clean_time_frames(series, slice_threshold)
 
-            else:
-                # Remove planes above base
-                clean_slices_base(series,incomplete_frames,percentage_base)
+                if remove_z_slices:
+                    remove_z_slices = [x - 1 for x in remove_z_slices]
+                    clean_slices_apex(series, percentage_apex,remove_z_slices)
 
-                # Remove slices below apex
-                apex_slices = clean_slices_apex(series, percentage_apex)
+                # else:
+                #     # Remove planes above base
+                #     clean_slices_base(series,incomplete_frames,percentage_base)
 
-        # Update time frame count after cleaning
-        self.time_frames = self.time_frames - len(incomplete_frames)
+                #     # Remove slices below apex
+                #     apex_slices = clean_slices_apex(series, percentage_apex)
 
-        #Postprecess cleaned data: Calculate world coordinates and new crop
-        postprocess_cleaned_data(self)
+                # # Update time frame count after cleaning
+                # self.time_frames = self.time_frames - len(incomplete_frames)
 
+                #Postprecess cleaned data: Calculate world coordinates and new crop
+                postprocess_cleaned_data(self)
+
+    def standardiseTimeframes(self, resample_to='fewest'):
+        '''
+        make sure all series have the same number of time frames, and resample them if they don't.
+        '''
+
+        print('standardising number of time frames across series by resampling..')
+
+        if len(self.series) == 1:
+            print('only one series, so no resampling required')
+            self.time_frames = self.series[0].frames
+            return
+
+        time_frames_seen = []
+
+        for s in self.series:
+            time_frames_seen.append(s.frames) #append number of frames in each series
+
+        time_frames_seen = np.unique(time_frames_seen) #collect only the unique values ß
+
+
+        if len(time_frames_seen) == 1: #all series have the same number of time frames
+            self.time_frames = time_frames_seen[0]
+            print('all series already have %d time frame(s), so no resampling required' % (time_frames_seen[0]))
+            return
+
+        if 1 in time_frames_seen:
+            print('some series only have a single time frame, these will be ignored')
+            time_frames_seen = [t for t in time_frames_seen if t != 1]
+
+
+        if resample_to == 'fewest':
+            #downsample to smallest time resolution:
+            print(time_frames_seen)
+            target_slices = np.min(time_frames_seen)
+            print(target_slices)
+        else: 
+            #otherwise upsample to highest temporal resolution:
+            target_slices = np.max(time_frames_seen)
+
+        print('resampling all series to %d time frames' % (target_slices,))
+        for s in self.series:
+
+            #skip series with only 1 time frame (upsampling them doesn't really make any sense..)
+            if s.frames == 1:
+                continue
+
+            if s.frames != target_slices:
+                s.prepped_data = zoom(s.data, (target_slices/s.data.shape[0],1,1,1), order=1) #zoom of data in time direction so that number of target slices is reached, while not inducing any change in other directions
+                s.cleaned_data = zoom(s.data, (target_slices/s.data.shape[0],1,1,1), order=1) #zoom of data in time direction so that number of target slices is reached, while not inducing any change in other directions
+                # is_sax = (s.view in ['SAX', 'unknown'])
+                # dat, seg, c1, c2 = produceSegAtRequiredRes(resampled_data, s.pixel_spacing, is_sax, use_tta)
+                # sz = 128
+                # c1 = np.clip(c1-sz//2, 0, seg.shape[2]-sz) 
+                # c2 = np.clip(c2-sz//2, 0, seg.shape[3]-sz) 
+                # s.prepped_seg_resampled = np.transpose(seg[:,:,c1:c1+sz,c2:c2+sz], (0,1,3,2))
+                # s.prepped_data_resampled = np.transpose(dat[:,:,c1:c1+sz,c2:c2+sz], (0,1,3,2))
+                # s.resampled = True
+                s.frames = target_slices
+
+        self.time_frames = target_slices
             
 
     def save_images(self, downsample_factor=1, subfolder=None, prefix=None, 
@@ -226,8 +307,6 @@ class DicomExam:
         output_folder = (self.folder['mesh_segs'] if use_mesh_images 
                         else self.folder['initial_segs'])
         
-        filename = ("Mesh_Visulization" if use_mesh_images
-                    else "Segmentation_Masks")
 
         if subfolder is not None:
             output_folder = os.path.join(output_folder, subfolder)
@@ -236,6 +315,9 @@ class DicomExam:
             os.makedirs(output_folder)
 
         for s_ind, series in enumerate(self):
+            filename = ("Mesh_Visulization" if use_mesh_images
+            else "Segmentation_Masks")
+
             # Select segmentation mask or sliced and volxelized mesh
             seg_data = series.mesh_seg if use_mesh_images else series.prepped_seg
 
@@ -250,6 +332,7 @@ class DicomExam:
                     seg_data[:, :, ::ds, ::ds], axis=2))
                 lab = to3Ch(lab)
 
+
                 # Combine image and segmentation
                 img = np.concatenate([img, lab], axis=0)
                 img = (img * 255).astype('uint8')
@@ -259,12 +342,15 @@ class DicomExam:
                     img1, img2 = img[:img.shape[0]//2], img[img.shape[0]//2:]
                     img = np.clip(img1 + img2 * 0.7, 0, 255)
                     img = img.astype('uint8')
+            
+            else:
+                img = (img * 255).astype('uint8')
 
             # Save image
             if prefix:
-                filename = f'{prefix}_{filename}.pdf'
+                filename = f'{prefix}_{series.name}_{filename}.pdf'
             else:
-                filename = f'{filename}.pdf'
+                filename = f'{series.name}_{filename}.pdf'
 
             imageio.imwrite(os.path.join(output_folder, filename), img)
 

@@ -2,7 +2,7 @@ import os,sys
 import pydicom
 import numpy as np
 
-def dataArrayFromDicom(PathDicom, multifile='unknown'):
+def dataArrayFromDicom(PathDicom, z_height_remove= None, time_frame_remove = None, multifile='unknown'):
     """
     Load image data from DICOM files in either single-file or multi-file format.
 
@@ -23,7 +23,8 @@ def dataArrayFromDicom(PathDicom, multifile='unknown'):
             multifile = False
 
     if multifile == True:
-        return dataArrayFromDicomFolder(PathDicom)
+        return dataArrayFromDicomFolder(PathDicom, z_height_remove, time_frame_remove)
+    
     elif multifile == False:
         return dataArrayFromDicomSingleFile(PathDicom)
     else:
@@ -47,7 +48,7 @@ def get_sorted_dicom_filenames(dicom_path):
         if not f.startswith('.') and not f.endswith('.gif')
     )
 
-def dataArrayFromDicomFolder(PathDicom):
+def dataArrayFromDicomFolder(PathDicom, z_height_remove = None, time_frame_remove = None):
     """
     Load 4D image data (time, z, y, x) from a folder of DICOM files.
 
@@ -136,7 +137,20 @@ def dataArrayFromDicomFolder(PathDicom):
     
     # Placeholder: This data is treated as 4D even though it's likely not volumetric over time
     is3D = False
-    multifile = True
+    multifile = True 
+
+    if z_height_remove:
+        #Remove identified slices from all data structures
+        data = np.delete(data, z_height_remove, axis=1)
+        image_ids = np.delete(image_ids, z_height_remove, axis=1)
+        image_positions = [item for i, item in enumerate(image_positions) if i not in z_height_remove]
+        slice_locations = [item for i, item in enumerate(slice_locations) if i not in z_height_remove]
+
+    if time_frame_remove:
+        #Remove identified time frames from all data structures
+        data = np.delete(data, time_frame_remove, axis=0)
+        image_ids = np.delete(image_ids, time_frame_remove, axis=0)
+
 
     return data, ConstPixelSpacing, image_ids, dicom_dir_details, slice_locations, trigger_times, image_positions, is3D, multifile
 

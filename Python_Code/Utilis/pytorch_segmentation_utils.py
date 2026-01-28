@@ -18,12 +18,9 @@ def produce_segmentation_at_required_resolution(data, pixel_spacing, is_sax=True
     Returns:
         tuple: normalized data, segmentation map, center coordinates (c1, c2)
     """
-
     # Resample to 1mm x 1mm in-plane resolution
     zoom_factors = (1, 1, pixel_spacing[1], pixel_spacing[2])
-    print(f"Zoom factors: {zoom_factors}")
     data = zoom(data, zoom_factors, order=1)
-
 
     # Normalize intensities
     data = data - data.min()
@@ -63,6 +60,92 @@ def hard_softmax(pred, threshold=0.3):
     pred *= content[..., None]
     return pred
 
+def getSeg(data, model, device, sz=256):
+    """
+    Iteratively find center of left ventricle and generate segmentation.
+    
+    Args:
+        data (np.ndarray): Input image data with shape (time, slices, height, width)
+        model (torch.nn.Module): PyTorch segmentation model
+        device (torch.device): Torch device (cuda or cpu)
+        sz (int): Size of cropped square region (default: 256)
+    
+    Returns:
+        tuple: (pred, c1, c2)
+            - pred: segmentation map with shape data.shape + (3,)
+            - c1: center coordinate in dimension 2
+            - c2: center coordinate in dimension 3
+    """
+    # Initialize center at middle of image
+    _, _, c1, c2 = data.shape
+    c1, c2 = c1 // 2, c2 // 2
+    center_moved = True
+    all_c1c2 = [(c1, c2)]
+    center_moved_counter = -1
+    
+    while center_moved:
+        center_moved_counter += 1
+        center_moved = False
+        
+        # Crop MRI data around current center coordinates
+        roi = get_image_at(c1, c2, data).reshape((-1, sz, sz, 1))
+        
+        # Convert to PyTorch format: (batch, channels, height, width)
+        roi = np.transpose(roi, (0, 3, 1, 2))
+        roi_tensor = torch.from_numpy(roi).float().to(device)
+        
+        # Run model prediction in batches
+        predictions = []
+        batch_size = 20
+        with torch.no_grad():
+            for i in range(0, roi_tensor.shape[0], batch_size):
+                batch = roi_tensor[i:i + batch_size]
+                pred_batch = model(batch)
+                predictions.append(pred_batch.cpu())
+        
+        pred_tensor = torch.cat(predictions, dim=0)
+        pred = pred_tensor.cpu().numpy()
+        pred = hard_softmax(pred)
+        
+        # Find center of mass of LV blood pool (channel 2)
+        new_c1, new_c2 = center_of_mass(np.mean(pred, axis=0)[..., 2])
+        
+        if np.isnan(new_c1) or np.isnan(new_c2):
+            print(new_c1, new_c2)
+            print('nothing found in center of image(s) for this series, aborting. Exclude the series or shift it to center on the heart')
+            sys.exit()
+        
+        new_c1, new_c2 = int(np.round(new_c1)), int(np.round(new_c2))
+        new_c1 = c1 + new_c1 - sz // 2
+        new_c2 = c2 + new_c2 - sz // 2
+        
+        # Check if center moved significantly
+        if np.abs(c1 - new_c1) > 2 or np.abs(c2 - new_c2) > 2:
+            center_moved = True
+            c1 = new_c1
+            c2 = new_c2
+            
+            # Handle cycling through same positions
+            if (c1, c2) in all_c1c2:
+                # Stuck in a loop - average points in loop
+                all_c1c2 = all_c1c2[all_c1c2.index((c1, c2)):]
+                c1, c2 = np.mean(all_c1c2, axis=0).astype('int')
+
+                break
+            
+            all_c1c2.append((c1, c2))
+    
+    # Pad prediction back to original spatial size
+    pred = np.pad(pred, ((0, 0), (c1, data.shape[2] - c1), (c2, data.shape[3] - c2), (0, 0)))
+    
+    # Remove padding introduced during ROI extraction
+    pred = pred[:, sz // 2:-sz // 2, sz // 2:-sz // 2]
+    
+    # Reshape prediction to match input data shape with 3-class output
+    pred = pred.reshape(data.shape + (3,))
+    
+    return pred, c1, c2
+
 def get_segmentation(data, model, device, sz=256):
     """
     Iteratively find center of left ventricle and generate segmentation.
@@ -86,10 +169,8 @@ def get_segmentation(data, model, device, sz=256):
         center_moved_counter += 1
         center_moved = False
 
-
         #crop MRI data around current center coordinates
         roi = get_image_at(c1, c2, data).reshape((-1, sz, sz, 1))
-
         roi = np.transpose(roi, (0, 3, 1, 2))
         roi_tensor = torch.from_numpy(roi).float().to(device)
 
