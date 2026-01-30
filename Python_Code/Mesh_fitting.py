@@ -173,8 +173,9 @@ def fit_mesh(dicom_exam,
 
         # Save outputs and Dice score
         with torch.no_grad():
+            #eli_new = ut.evalLearnedInputs(learned_inputs, mode_bounds, mode_means, mesh_1, PHI,dicom_exam)
             d0_values ,d1_values, d0_values_series_1, d1_values_series_1, d0_values_series_2, d1_values_series_2= ut.save_results_post_training(
-                dicom_exam, outputs, eli,se, sz, use_bp_channel, 
+                dicom_exam, outputs, eli, se, sz, use_bp_channel, 
                               -mesh_origin, learned_inputs, tensor_labels)
             
             # Create a DataFrame

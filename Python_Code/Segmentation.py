@@ -65,7 +65,7 @@ def segment(dicom_exam,margin_factor=2):
         
         # Calculate optimal crop size based on myocardium segmentationx
         #crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y,margin_factor=margin_factor)
-        crop_size = 200
+        crop_size = 160 #128 
         crop_sizes.append(crop_size)
 
         # Ensure crop region stays within image bounds

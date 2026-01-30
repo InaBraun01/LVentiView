@@ -462,16 +462,10 @@ class DicomExam:
                 else:
                     all_slices.extend(s.XYZs)
             grid = np.concatenate(all_slices)
-            print("Grid shape:")
-            print(grid.shape)
             self.center = np.mean(grid, axis=0)
-            print(self.center)
 
-        print(center_shift)
         if center_shift is not None:
             self.center -= center_shift
-        print("After shift")
-        print(self.center)
 
 
 
@@ -482,14 +476,9 @@ class DicomExam:
         grid = np.concatenate(all_slices)
         self.center = np.mean(grid, axis=0)
 
-        print(self.center)
-
-        print(center_shift)
         #Apply manual center shift if provided
         if center_shift is not None:
             self.center -= center_shift
-        print("after shift")
-        print(self.center)
 
 
         self.vpc, self.sax_normal, self.rv_center = [], [], [] #make an array and then take average to handel the case of multiple SAX series
@@ -539,8 +528,8 @@ class DicomExam:
 
                         # print(RV[i].shape)
                         #rv_xyzs.append(s.XYZs[i].reshape((128,128,3))[RV[i]==1])
-                        rv_xyzs.append(s.XYZs[i].reshape((200,200,3))[RV[i]==1])
-                        #rv_xyzs.append(s.XYZs[i].reshape((64,64,3))[RV[i]==1])
+                        #rv_xyzs.append(s.XYZs[i].reshape((200,200,3))[RV[i]==1])
+                        rv_xyzs.append(s.XYZs[i].reshape((160,160,3))[RV[i]==1])
 
                 if len(rv_xyzs) > 0:
                     rv_xyzs = np.concatenate(rv_xyzs,axis=0)

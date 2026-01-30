@@ -5,7 +5,7 @@ This module implements the training loop for fitting 3D meshes to medical imagin
 specifically for cardiac segmentation tasks. It includes functionality for training
 neural networks to predict mesh deformations and control points.
 """
-
+import sys
 import csv
 import numpy as np
 import pandas as pd
@@ -20,9 +20,9 @@ from Python_Code.Utilis.fit_mesh_utils import (
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method,optimizer, lr, li_model, mean_arr_batch, 
-                   tensor_labels,dice_loss_weight, mode_loss_weight, global_shift_penalty_weigth,
+# device = 'cpu'
+def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method, optimizer, lr, li_model, mean_arr_batch, 
+                   tensor_labels, dice_loss_weight, mode_loss_weight, global_shift_penalty_weigth,
                    slice_shift_penalty_weigth, rotation_penalty_weigth, se, eli, pcaD, 
                    warp_and_slice_model, train_mode, steps_between_fig_saves,
                    steps_between_progress_update, mesh_offset, progress_callback, myo_weight=1, bp_weight=500, 
@@ -61,7 +61,7 @@ def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method,optimiz
     
     Returns:
         array: final_outputs
-            - final_outputs: Final model predictions
+            - final_outputs: Final model predictions from the best checkpoint
 
     """
     # Initialize training variables
@@ -78,24 +78,30 @@ def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method,optimiz
 
     bp_weights = []
     
+    # Initialize best model tracking
+    best_dice_loss = float('inf')
+    best_model_state = None
+    best_outputs = None
+    best_step = 0
+    
     # Enable anomaly detection for debugging
     torch.autograd.set_detect_anomaly(True)
 
-    #Tensor of ones used as input
+    # Tensor of ones used as input
     ones_input = torch.Tensor(np.ones((1, 1))).to(device)
 
-    #define optimizer
+    # Define optimizer
     optimizer = opt_method(li_model.parameters(), lr=lr)
-    #Define scheduler
+    # Define scheduler
     scheduler = ReduceLROnPlateau(
-    optimizer,
-    mode='min',
-    factor=0.5,
-    patience=50,
-    threshold=1e-4,
-    threshold_mode='rel',
-    cooldown=50,
-    min_lr=1e-6)
+        optimizer,
+        mode='min',
+        factor=0.5,
+        patience=200,
+        threshold=1e-4,
+        threshold_mode='rel',
+        cooldown=50,
+        min_lr=1e-6)
 
     initial_loss = 1000.0  # use a dummy value
     scheduler.step(initial_loss)
@@ -103,7 +109,7 @@ def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method,optimiz
     while should_continue_training(i, df_myo_dice, df_bp_dice, fitting_steps, dicom_exam):
 
         # Initialize training variables
-        if i > 2*ts3: #linearly decrease blood pool weight during training
+        if i > 2*ts3:  # linearly decrease blood pool weight during training
             bp_weight = 0
         elif i > ts3:
             bp_weight = (2*ts3-i)/ts3
@@ -129,7 +135,7 @@ def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method,optimiz
         # Total loss
         loss = dice_loss_weight*sum(dice_loss) + sum(modes_loss) + sum(global_shift_loss) + sum(rotation_loss) + sum(slice_shift_loss)
 
-        #Use scheduler to potentially update the learning rate
+        # Use scheduler to potentially update the learning rate
         prev_lr = scheduler.get_last_lr()[0]
         scheduler.step(sum(dice_loss).item())
         new_lr = scheduler.get_last_lr()[0]
@@ -143,23 +149,39 @@ def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method,optimiz
         
         losses = [loss, sum(dice_loss), sum(modes_loss), sum(global_shift_loss), sum(rotation_loss), sum(slice_shift_loss)]
 
+        # Check if this is the best model so far (based on dice loss)
+        current_dice_loss = sum(dice_loss).item()
+        if current_dice_loss < best_dice_loss:
+            best_dice_loss = current_dice_loss
+            best_li_model= {key: value.cpu().clone() for key, value in li_model.state_dict().items()}
+            best_learned_inputs =  {key: value.cpu().clone() for key, value in learned_inputs.state_dict().items()}
+            best_warp_and_slice_model =  {key: value.cpu().clone() for key, value in warp_and_slice_model.state_dict().items()}
+            best_pcaD =  {key: value.cpu().clone() for key, value in pcaD.state_dict().items()}
+
+            best_outputs = tuple(output for output in outputs) if isinstance(outputs, tuple) else outputs
+            best_step = i
+            if show_progress:
+                print(f"[Step {i}] New best dice loss: {best_dice_loss:.6f}")
+
         # Backward pass and optimization
         loss.backward()
         optimizer.step()
+        param_name = "modes_output_layer.weight"
+
 
         # Evaluation and logging (no gradient computation needed)
         with torch.no_grad():
 
             # Update mesh rendering periodically
             if i % steps_between_fig_saves == 0:
-                    mean_arr_batch = update_mesh_rendering_and_training_state(
+                mean_arr_batch = update_mesh_rendering_and_training_state(
                     dicom_exam, se, eli, warp_and_slice_model, learned_inputs, 
                     pcaD, mesh_offset)
                 
             # Print progress and calculate metrics periodically
             if i % steps_between_progress_update == 0:
-                d0,d1 = print_training_progress(
-                    i, fitting_steps, losses, outputs, tensor_labels,dicom_exam ,show_progress
+                d0, d1 = print_training_progress(
+                    i, fitting_steps, losses, outputs, tensor_labels, dicom_exam, show_progress
                 )
 
                 df_myo_dice.loc[len(df_myo_dice)] = d0
@@ -170,11 +192,31 @@ def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method,optimiz
 
         i += 1
 
-    # #save blood pool and myocardium dice for all time steps and training epochs
-    # df_myo_dice.to_csv(dicom_exam.folder['base'] + '/myo_dice_history.csv')
-    # df_bp_dice.to_csv(dicom_exam.folder['base'] + '/bp_dice_history.csv')
+    # Restore best model weights
+    if best_outputs is not None:
+        print("Before:", learned_inputs.state_dict()[param_name][0,0].item())
+        li_model.load_state_dict({key: value.to(device) for key, value in best_li_model.items()})
 
-    return outputs
+        param_name = "modes_output_layer.weight"
+        
+        learned_inputs.load_state_dict({key: value.to(device) for key, value in best_learned_inputs.items()})
+        print("After :", learned_inputs.state_dict()[param_name][0,0].item())
+
+        warp_and_slice_model.load_state_dict({key: value.to(device) for key, value in best_warp_and_slice_model.items()})
+        pcaD.load_state_dict({key: value.to(device) for key, value in best_pcaD.items()})
+        print("Hello")
+        print(f"\nRestored best model from step {best_step} with dice loss: {best_dice_loss:.6f}") 
+
+        # Return the best outputs (move back to device if needed)
+        if isinstance(best_outputs, tuple):
+            final_outputs = tuple(output for output in best_outputs)
+        else:
+            final_outputs = best_outputs #, learned_inputs
+    else:
+        final_outputs = outputs #, learned_inputs
+
+    print("Bye")
+    return final_outputs #, learned_inputs
 
 # def should_continue_training(i, df_myo_dice, df_bp_dice, fitting_steps, dicom_exam, 
 #                             best_mean_dice_info, no_improvement_counter, 

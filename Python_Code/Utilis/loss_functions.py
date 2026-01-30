@@ -70,7 +70,7 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
         #calculate dice loss for myocardium
         d0 = one_minus_dice_loss(pred[index][:,:1], target[:,:1,:,:,:,time_step], slice_weights) * myo_weight 
         #calculate dice loss for blood pool
-        d1 = one_minus_dice_loss(pred[index][:,1:], target[:,1:,:,:,:,time_step], slice_weights) * bp_weight  
+        d1 = one_minus_dice_loss(pred[index][:,1:], target[:,1:,:,:,:,time_step], slice_weights) * bp_weight 
         
         # Combine segmentation losses
         d_loss = d0 + d1
@@ -86,6 +86,7 @@ def meshFittingLoss(pred, modes, global_shifts, slice_shifts, rots, target,
         global_shift_losses.append(global_shift_loss)
         rotation_losses.append(rotation_loss)
         slice_shift_losses.append(slice_shift_loss)
+
         
     return dice_losses, mode_losses, global_shift_losses, rotation_losses, slice_shift_losses
 

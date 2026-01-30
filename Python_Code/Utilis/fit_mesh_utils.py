@@ -31,7 +31,6 @@ from scipy.ndimage.morphology import binary_fill_holes as bfh
 # Set device for PyTorch computations
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
 def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
     """
     Load a statistical shape model with PCA modes for cardiac mesh analysis.
