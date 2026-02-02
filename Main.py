@@ -69,7 +69,7 @@ output_folder='outputs_patient_data/LAX_results_128'
 
 # datasets = [ "SCD1501", "SCD1601", "SCD1801", "SCD2101", "SCD2901"]
 
-datasets = ["SCD2701"]
+datasets = ["SCD1901","SCD2001","SCD2701"]
 
 
 # Define valid stages
@@ -209,7 +209,7 @@ for index,dataset_to_use in enumerate(datasets):
                     # Fit 3D Volumetric meshes to the generated Segmentation masks
                     df_end_dice = fit_mesh(
                         de,
-                        fitting_steps=1,
+                        fitting_steps=10000,
                         slice_shift_penalty_weigth= 100,
                         time_frames_to_fit="all",
                     )
@@ -239,7 +239,7 @@ for index,dataset_to_use in enumerate(datasets):
                         # Fit mesh for this chunk
                         df_chunk_dice = fit_mesh(
                             de,
-                            fitting_steps=1,
+                            fitting_steps=10000,
                             slice_shift_penalty_weigth= 100,
                             time_frames_to_fit=time_frames_chunk,
                         )
