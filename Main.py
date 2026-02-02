@@ -54,20 +54,22 @@ def load_time_frames_removed(csv_path, patient_id):
 #Lines for me to test the code
 
 data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Human_data/'
-output_folder='outputs_patient_data/LAX_results' 
+output_folder='outputs_patient_data/LAX_results_128' 
 
 # datasets = [name for name in os.listdir(data_dir) 
 #                 if os.path.isdir(os.path.join(data_dir, name))]
 
-# datasets = [ "SCD3701", "SCD3801", "SCD4001","SCD4101","SCD4201","SCD4301","SCD4401","SCD4501"]
+#datasets = ["SCD4101","SCD4201","SCD4301","SCD4401","SCD4501"]
 
 # datasets = ["SCD0101", "SCD0201", "SCD0301", "SCD0401", "SCD0501", "SCD0601", "SCD0701", "SCD0801", "SCD0901", "SCD1001", "SCD1101", "SCD1201"]
 
-# datasets = ["SCD1301", "SCD1401", "SCD1501", "SCD1601", "SCD1701", "SCD1801", "SCD1901", "SCD2001", "SCD2101", "SCD2201", "SCD2301", "SCD2401"]
+#datasets = ["SCD1301", "SCD1401", "SCD1501", "SCD1601", "SCD1701", "SCD1801", "SCD1901", "SCD2001", "SCD2101", "SCD2201", "SCD2301", "SCD2401"]
 
-# datasets = ["SCD2501","SCD2601","SCD2701","SCD2801","SCD2901","SCD3001", "SCD3101", "SCD3201", "SCD3301", "SCD3401", "SCD3501", "SCD3601"]
+#datasets = ["SCD2501","SCD2601","SCD2701","SCD2801","SCD2901","SCD3001", "SCD3101", "SCD3201", "SCD3301", "SCD3401", "SCD3501", "SCD3601"]
 
-datasets = ["SCD4101","SCD4201","SCD4301","SCD4401","SCD4501"]
+# datasets = [ "SCD1501", "SCD1601", "SCD1801", "SCD2101", "SCD2901"]
+
+datasets = ["SCD2701"]
 
 
 # Define valid stages
@@ -190,21 +192,13 @@ for index,dataset_to_use in enumerate(datasets):
         de.fitted_meshes = {}
         start_time = time.time()
         print("Running Mesh Fitting...")
-
-        # df_end_dice = fit_mesh(
-        #             de,
-        #             allow_slice_shift=True,
-        #             slice_shift_penalty_weigth= 100,
-        #             fitting_steps=200,
-        #             time_frames_to_fit=[0],
-        #         )
         
         # Try progressively smaller batches if GPU memory is insufficient
         max_attempts = 10  # Maximum number of reduction attempts
         divisor = 1
         success = False
         df_end_dice = None
-        
+
         for attempt in range(max_attempts):
             try:
                 # Determine which time frames to fit
@@ -215,7 +209,7 @@ for index,dataset_to_use in enumerate(datasets):
                     # Fit 3D Volumetric meshes to the generated Segmentation masks
                     df_end_dice = fit_mesh(
                         de,
-                        fitting_steps=1000,
+                        fitting_steps=1,
                         slice_shift_penalty_weigth= 100,
                         time_frames_to_fit="all",
                     )
@@ -245,7 +239,7 @@ for index,dataset_to_use in enumerate(datasets):
                         # Fit mesh for this chunk
                         df_chunk_dice = fit_mesh(
                             de,
-                            fitting_steps=1000,
+                            fitting_steps=1,
                             slice_shift_penalty_weigth= 100,
                             time_frames_to_fit=time_frames_chunk,
                         )
@@ -302,8 +296,12 @@ for index,dataset_to_use in enumerate(datasets):
         # Analysis and Plots various cardiac parameters calculated directly from the volumetric mesh
         analyze_mesh_volumes(de)
         
-        print("Calculate Local Thickness...")
-        meshes_compute_thickness_map(de)
+        try:
+            print("Calculate Local Thickness...")
+            meshes_compute_thickness_map(de)
+        except Exception as e:
+            print(f"Skipping thickness calculation due to error: {e}")
+            continue
         
         print("Saving Analysis Object...")
         # Save object of type DicomExam as pickle file
