@@ -1,4 +1,4 @@
-import os
+import os,sys
 import csv
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, QTextEdit, 
                              QFileDialog, QHBoxLayout, QListWidget, QListWidgetItem, 
@@ -635,19 +635,26 @@ class DicomAnalysisApp(QWidget):
         manual_params_layout = QFormLayout(manual_params_widget)
         manual_params_layout.setSpacing(12)
         
+        # In your UI setup code
         manual_params = [
-            ('remove_z_slices', 'Z Slices to Remove'),
-            ('remove_time_steps', 'Time Steps to Remove')
+            ('dict_z_slices_removed', 'Z Slices to Remove (by Series)'),
+            ('dict_time_frames_removed', 'Time Frames to Remove (by Series)')
         ]
 
         for key, label in manual_params:
-            input_widget = QLineEdit()
-            input_widget.setText("")
-            input_widget.setValidator(IntListValidator())
-            input_widget.setPlaceholderText("e.g., 1,2,5 or leave empty")
+            # Use QTextEdit for multi-line input
+            input_widget = QTextEdit()
+            input_widget.setPlaceholderText(
+                "Format: One series per line\n"
+                "Example:\n"
+                "CINELAX_301: 0,1,2,3,7,8,9,10\n"
+                "CINESAX_300: 0,1,10,11"
+            )
+            input_widget.setMaximumHeight(100)  # Limit height
             
             label_widget = QLabel(label + ':')
             label_widget.setStyleSheet("font-weight: 500; color: #2c3e50;")
+            
             manual_params_layout.addRow(label_widget, input_widget)
             self.param_fields[key] = input_widget
 
@@ -1109,45 +1116,110 @@ class DicomAnalysisApp(QWidget):
         self.set_params_tab_widget.setVisible(checked)
     
 
+    # def get_clean_params(self):
+    #     params = {}
+    #     for key, widget in self.param_fields.items():
+    #         text = widget.text().strip()
+
+    #         if key in ['percentage_base', 'percentage_apex']:
+    #             # Floats in [0, 1]
+    #             try:
+    #                 value = float(text)
+    #                 if 0 <= value <= 1:
+    #                     params[key] = value
+    #                 else:
+    #                     self.log_output.append(f"Value for {key} must be between 0 and 1: {text}")
+    #                     params[key] = 0.0  # Default fallback
+    #             except ValueError:
+    #                 self.log_output.append(f"Invalid float for {key}: {text}")
+    #                 params[key] = 0.0  # Default fallback
+
+    #         elif key == 'slice_threshold':
+    #             # Single integer
+    #             try:
+    #                 params[key] = int(text)
+    #             except ValueError:
+    #                 self.log_output.append(f"Invalid integer for {key}: {text}")
+    #                 params[key] = 0  # Default fallback
+
+    #         elif key.strip().lower() in ['remove_z_slices', 'remove_time_steps']:   
+    #             # List of integers
+    #             if text == "":
+    #                 params[key] = []  # Empty allowed
+    #             else:
+    #                 try:
+    #                     int_list = [int(x.strip()) for x in text.split(",") if x.strip() != ""]
+    #                     params[key] = int_list
+    #                 except ValueError:
+    #                     self.log_output.append(f"Invalid list of integers for {key}: {text}")
+    #                     params[key] = []  # Default fallback
+
+    #     return params
+
     def get_clean_params(self):
         params = {}
         for key, widget in self.param_fields.items():
-            text = widget.text().strip()
-
+            text = widget.text().strip() if hasattr(widget, 'text') else widget.toPlainText().strip()
+            
             if key in ['percentage_base', 'percentage_apex']:
-                # Floats in [0, 1]
                 try:
                     value = float(text)
                     if 0 <= value <= 1:
                         params[key] = value
                     else:
                         self.log_output.append(f"Value for {key} must be between 0 and 1: {text}")
-                        params[key] = 0.0  # Default fallback
+                        params[key] = 0.0
                 except ValueError:
                     self.log_output.append(f"Invalid float for {key}: {text}")
-                    params[key] = 0.0  # Default fallback
-
+                    params[key] = 0.0
+                    
             elif key == 'slice_threshold':
-                # Single integer
                 try:
                     params[key] = int(text)
                 except ValueError:
                     self.log_output.append(f"Invalid integer for {key}: {text}")
-                    params[key] = 0  # Default fallback
-
-            elif key.strip().lower() in ['remove_z_slices', 'remove_time_steps']:   
-                # List of integers
-                if text == "":
-                    params[key] = []  # Empty allowed
-                else:
-                    try:
-                        int_list = [int(x.strip()) for x in text.split(",") if x.strip() != ""]
-                        params[key] = int_list
-                    except ValueError:
-                        self.log_output.append(f"Invalid list of integers for {key}: {text}")
-                        params[key] = []  # Default fallback
-
+                    params[key] = 0
+                    
+            elif key in ['dict_z_slices_removed', 'dict_time_frames_removed']:
+                # Parse multi-line dictionary format
+                params[key] = self.parse_series_dict(text, key)
+                
         return params
+
+    def parse_series_dict(self, text, param_name):
+        """Parse multi-line input into dictionary format.
+        Expected format:
+            CINELAX_301: 0,1,2,3,7,8,9,10
+            CINESAX_300: 0,1,10,11
+        """
+        result = {}
+        if not text:
+            return result
+        
+        lines = text.strip().split('\n')
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line:
+                continue
+                
+            if ':' not in line:
+                self.log_output.append(f"{param_name} line {line_num}: Missing ':' separator")
+                continue
+                
+            series_name, indices_str = line.split(':', 1)
+            series_name = series_name.strip()
+            indices_str = indices_str.strip()
+            
+            try:
+                if indices_str:
+                    indices = [int(x.strip()) for x in indices_str.split(',') if x.strip()]
+                else:
+                    indices = []
+                result[series_name] = indices
+            except ValueError:
+                self.log_output.append(f"{param_name} line {line_num}: Invalid integers for '{series_name}'")
+                
+        return result
     
 
     def get_crop_params(self):
@@ -1162,6 +1234,7 @@ class DicomAnalysisApp(QWidget):
     import csv
 
     def load_and_display_metrics(self, csv_path):
+
         if not os.path.exists(csv_path):
             self.results_box.setPlainText("Results file not found.")
             return

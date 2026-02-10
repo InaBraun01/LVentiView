@@ -41,7 +41,11 @@ class AnalysisThread(QThread):
 
             # Step 1: Load exam data
             self.log_signal.emit("Loading DICOM data...")
-            de = DicomExam(self.input_folder, self.output_folder)
+            de = DicomExam(self.input_folder, self.output_folder, self.clean_params['dict_z_slices_removed'], self.clean_params['dict_time_frames_removed'])
+
+            #Step 2: Standardising number of time frames over series
+            self.log_signal.emit("Standardising Number of Time Frames Across Series by Resampling..")
+            de.standardiseTimeframes()
 
             # Step 2: Run segmentation
             self.log_signal.emit("Running segmentation...")
@@ -63,7 +67,7 @@ class AnalysisThread(QThread):
             # Step 4: Optional data cleaning
             if self.do_clean:
                 self.log_signal.emit("Cleaning data...")
-                de.clean_data(**self.clean_params)
+                de.clean_data(self.clean_params['percentage_base'], self.clean_params['percentage_apex'], self.clean_params["slice_threshold"])
                 self.log_signal.emit("Saving cleaned images...")
                 de.save_images(prefix='cleaned')
                 if os.path.exists(seg_image_folder):
