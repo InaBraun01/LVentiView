@@ -397,8 +397,8 @@ class DicomAnalysisApp(QWidget):
             <p style="margin-bottom: 8px;"><strong>1. Load MRI Data:</strong></p>
             <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
             Click on <em>Browse MRI Data...</em> and select the folder containing the MRI images in either DICOM or NIfTI format. 
-            You should have a folder containing all DICOM or NIfTI files for one patient scan. For example, if this folder 
-            is called 'PatientX', select this 'PatientX' folder.
+            You should have a folder containg all DICOM or NIfTI files for one patient. The individual MRI series of that patient, that should be segmented, should be in seperate subfolders.
+            For example the you should have the folder for patient X that contains a subfolder for an acquired SAX MRI series and a subfolder for an acquired LAX MRI series.
             </p>
             
             <p style="margin-bottom: 8px;"><strong>2. Select Output Folder:</strong></p>
@@ -417,7 +417,7 @@ class DicomAnalysisApp(QWidget):
         </p>
 
         <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
-            <p style="margin-bottom: 10px; font-weight: 600;">MRI Cleaning:</p>
+            <p style="margin-bottom: 10px; font-weight: 600;">MRI Cleaning of SAX slices:</p>
             <ul style="margin: 0; padding-left: 25px; font-size: 12px;">
                 <li style="margin-bottom: 6px;"><strong>Exclusion threshold at base:</strong> Defines the threshold for removing incomplete slices at the base of the heart</li>
                 <li style="margin-bottom: 6px;"><strong>Exclusion threshold at apex:</strong> Defines the threshold for removing incomplete slices at the apex</li>
@@ -427,7 +427,7 @@ class DicomAnalysisApp(QWidget):
         </div>
 
         <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
-            <p style="margin-bottom: 10px; font-weight: 600;">Manual Cleaning:</p>
+            <p style="margin-bottom: 10px; font-weight: 600;">Manual Cleaning of SAX and LAX slices:</p>
             <ul style="margin: 0; padding-left: 25px; font-size: 12px;">
                 <li style="margin-bottom: 6px;"><strong>Z Slices to Remove:</strong> Comma-separated list of slice indices to manually exclude (e.g., 1,2,5)</li>
                 <li style="margin-bottom: 6px;"><strong>Time Steps to Remove:</strong> Comma-separated list of time frame indices to manually exclude</li>

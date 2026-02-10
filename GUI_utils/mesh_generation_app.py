@@ -240,18 +240,158 @@ class MeshGenerationApp(QWidget):
         # Help content (hidden initially)
         help_content = QTextEdit()
         help_content.setReadOnly(True)
-        help_content.setText(
-            "This module allows you to preprocess MRI scans, perform segmentation "
-            "using deep learning models, clean the segmented data, and calculate "
-            "ventricular volumes based on Simpson’s rule.\n\n"
-            "➡ Steps:\n"
-            "1. Load MRI dataset\n"
-            "2. Run segmentation\n"
-            "3. Review segmentation masks\n"
-            "4. Perform cleaning\n"
-            "5. Calculate volumes\n\n"
-            "Use the controls on the right to configure segmentation options."
-        )
+        help_content.setHtml("""
+            <div style="font-family: 'Segoe UI'; line-height: 1.6; color: #2c3e50;">
+
+            <p style="margin-bottom: 20px; font-size: 13px;">
+            This module allows you to automatically fit volumetric meshes to segmented MRI series. You can either fit volumetric
+            meshes to a single MRI series or two multiple MRI series (e.g. SAX and LAX view). Additionally this module includes futher 
+            post-processing steps such as calculating blood pool and myocardium volume as well as a local thickness map for each generated mesh.
+            </p>
+                             
+            <p style="margin-bottom: 20px; font-size: 13px;">
+            In the following sections, we describe the different parts where manual input is possible or required.
+            </p>
+                             
+            <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+            Data Selection
+            </h3>
+            
+        <p style="margin-bottom: 10px; font-size: 13px;">
+        The user is required to select the folder containing the MRI images that were already segmented and the output folder that 
+        contains the segmentation masks and into which the results will be saved.
+        </p>
+
+        <div style="margin-left: 15px; margin-bottom: 15px;">
+            <p style="margin-bottom: 8px;"><strong>1. Load MRI Data:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Click on <em>Select Segmented Data...</em> and select the folder containing the MRI images in either DICOM or NIfTI format. 
+            You should have a folder containg all DICOM or NIfTI files for one patient. The individual MRI series of that patient, that are already segmented, should be in seperate subfolders.
+            For example the you should have the folder for patient X that contains a subfolder for an acquired SAX MRI series and a subfolder for an acquired LAX MRI series.
+            </p>
+            
+            <p style="margin-bottom: 8px;"><strong>2. Select Output Folder:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Click on <em>Browse Mesh Output...</em> and select the destination folder. The folder must already exist and should contain the segmentation masks to which the volumetric mesh will be fitted (provided as a pickle file).
+            All outputs generated during the mesh fitting and analysis process will be saved to this folder.
+            </p>
+        </div>
+                             
+        <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+        Select Advanced Parameters
+        </h3>
+        </div>
+
+        <p style="margin-bottom: 10px; font-size: 13px;">
+        The parameters in this expandable section can be set manually by the user.
+        </p>
+                             
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
+            <p style="margin-bottom: 10px; font-weight: 600;">Mesh Fitting Parameters:</p>
+            <ul style="margin: 0; padding-left: 25px; font-size: 12px;">
+                <li style="margin-bottom: 6px;"><strong>Time Frames to Fit:</strong> Either a list of time steps (specified as integers starting from 0) to which meshes should be fitted, or all, if a mesh should be fit to all time frames.</li>
+                <li style="margin-bottom: 6px;"><strong>Fitting Steps:</strong> Number of optimization iterations performed for each time frame.</li>
+                <li style="margin-bottom: 6px;"><strong>Learning Rate:</strong> Initial learning rate used during mesh fitting, controlling the magnitude of parameter updates.</li>
+                <li style="margin-bottom: 6px;"><strong>Number of Modes:</strong> Number of POD modes used in the mesh fitting process.</li>
+            </ul>
+        </div>    
+
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
+            <p style="margin-bottom: 10px; font-weight: 600;">Advanced Fitting Parameters:</p>
+            <ul style="margin: 0; padding-left: 25px; font-size: 12px;">
+                <li style="margin-bottom: 6px;"><strong>Control Point Frequency:</strong> Spatial frequency of mesh control points used to regulate mesh deformation during fitting to the segmentation masks.</li>
+                <li style="margin-bottom: 6px;"><strong>Shape Model Directory:</strong> Path to the directory containing the shape model (POD modes) used for fitting to the segmentation masks.</li>
+                <li style="margin-bottom: 6px;"><strong>Steps between Mesh Updates:</strong> Number of optimization steps between successive mesh fit updates reported in the Mesh Log.</li>
+            </ul>
+        </div>  
+
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
+            <p style="margin-bottom: 10px; font-weight: 600;">Regulate Shifts + Rotations:</p>
+            <ul style="margin: 0; padding-left: 25px; font-size: 12px;">
+                <li style="margin-bottom: 6px;"><strong>Global x,y Shifs:</strong> True/False if reference mesh fit to the segmentation masks can be shifted in x and y direction during fitting.</li>
+                <li style="margin-bottom: 6px;"><strong>Global z Shifts:</strong> True/False if reference mesh fit to the segmentation masks can be shifted in z direction during fitting.</li>
+                <li style="margin-bottom: 6px;"><strong>Slice Shifts:</strong> True/False if the segmentation masks fit can be shifted in x and y direction during fitting.</li>
+                <li style="margin-bottom: 6px;"><strong>Global Rotations:</strong> True/False if reference mesh fit to the segmentation masks can be rotated direction during fitting.</li>
+            </ul>
+        </div>  
+
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
+            <p style="margin-bottom: 10px; font-weight: 600;">Loss Function Weights:</p>
+
+            <ul style="margin: 0; padding-left: 25px; font-size: 12px;">
+                <li style="margin-bottom: 6px;">
+                    The loss function minimized during mesh fitting consists of six components: Dice-based overlap terms for the myocardium and blood pool, and weighted regularization terms based on an <em>l<sub>1</sub></em> norm.
+                    The <em>l<sub>1</sub></em> regularization penalizes the absolute magnitude of the mode coefficients, slice shifts, and global mesh transformations (global translation and rotation), thereby discouraging excessively large parameter values.
+                    The parameters configured here correspond to the weighting factors applied to each loss term: the <strong>Dice loss weight</strong> for the overlap terms, the <strong>mode weight</strong> for the mode coefficient terms,
+                    the <strong>slice shift penalty</strong> for slice displacement, and the <strong>global shift</strong> and <strong>global rotation penalties</strong> for global mesh transformations.
+                </li>
+            </ul>
+        </div>
+        
+        <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+        Select Post-Mesh Analysis Steps
+        </h3>
+
+        <div style="margin-left: 15px; margin-bottom: 15px;">
+            <p style="margin-bottom: 8px;"><strong>1. Calculate Volumes:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Computes cardiac function parameters including EDV, ESV, SV, and EF from the generated meshes using the GetVolume function from the VTK library.
+            </p>
+            
+            <p style="margin-bottom: 8px;"><strong>2. Calculate Thickness:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Computes local thickness map for each generated mesh. The x axis of the thickness map describing the normalized time and the y axis describing the thickness at a given z height averaged over all azimuthal angels.
+            </p>
+        </div>
+                             
+        <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+        Run Mesh Generation
+        </h3>
+        
+                             
+        <p style="margin-bottom: 15px; font-size: 13px;">
+        Click <strong>Run Mesh Generation</strong> to begin the automated mesh fitting and analysis pipeline.
+        </p>
+        
+        <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
+        Mesh Generation Progress & Results
+        </h3>
+                             
+            <div style="margin-left: 15px;">
+            <p style="margin-bottom: 8px;"><strong>1. Mesh Log:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Real-time progress updates and processing messages
+            </p>
+            
+            <p style="margin-bottom: 8px;"><strong>2. Mesh Visulization:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Visual overlay of sliced generated mesh on MRI images for quality assessment
+            </p>
+            
+            <p style="margin-bottom: 8px;"><strong>3. Blood Pool and Myocardium Volumes:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Time-series plots showing blood pool and myocardial volume throughout the cardiac cycle 
+            calculated from the generated meshes.
+            </p>
+                             
+            <p style="margin-bottom: 8px;"><strong>3. Fit of Meshes to Segmentation Masks:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Dice scores between segmentation masks and generated mesh for both the blood pool and the myocardium.
+            </p>
+                             
+            <p style="margin-bottom: 8px;"><strong>4. Computed Cardiac Function Parameters:</strong></p>
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
+            Calculated metrics including end-diastolic volume (EDV), end-systolic volume (ESV), 
+            stroke volume (SV), and ejection fraction (EF)
+            </p>
+        </div>
+
+        </div>
+
+                             
+
+
+       """)
         help_content.setFont(QFont("Segoe UI", 11))
         help_content.setStyleSheet("QTextEdit { border: none; background: #f9f9f9; }")
         help_content.setVisible(False)  
@@ -352,7 +492,7 @@ class MeshGenerationApp(QWidget):
         
         fitting_params = [
             ('time_frames_to_fit', 'Time Frames to be Fit', 'all'),
-            ('fitting_steps', 'fitting Steps', '1'),
+            ('fitting_steps', 'Fitting Steps', '1'),
             ('lr', 'Learning Rate', '0.003'),
             ('num_modes', 'Number of Modes', '25'),
         ]
@@ -428,7 +568,7 @@ class MeshGenerationApp(QWidget):
             ('mode_loss_weight', 'Mode weight', '0.05'),
             ('global_shift_penalty_weigth', 'Global Shift Penalty', '0.3'),
             ('slice_shift_penalty_weigth', 'Slice Shift Penalty', '10'),
-            ('rotation_penalty_weigth', 'Rotation Penalty', '1')
+            ('rotation_penalty_weigth', 'Global Rotation Penalty', '1')
         ]
 
         for key, label, default in weight_params:
@@ -932,7 +1072,7 @@ class MeshGenerationApp(QWidget):
 
             
             dir_name = os.path.dirname(os.path.dirname(plot_folder))
-            csv_path = os.path.join(dir_name, "end_dice.csv")  # Need to still replace this, so that it works
+            csv_path = os.path.join(dir_name, "both_end_dice.csv")  # Need to still replace this, so that it works
             self.load_and_display_dice_stats(csv_path)
 
         except Exception as e:
