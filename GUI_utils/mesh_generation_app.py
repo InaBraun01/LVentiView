@@ -245,7 +245,7 @@ class MeshGenerationApp(QWidget):
 
             <p style="margin-bottom: 20px; font-size: 13px;">
             This module allows you to automatically fit volumetric meshes to segmented MRI series. You can either fit volumetric
-            meshes to a single MRI series or two multiple MRI series (e.g. SAX and LAX view). Additionally this module includes futher 
+            meshes to a single MRI series or multiple MRI series (e.g. SAX and LAX view). Additionally this module includes further 
             post-processing steps such as calculating blood pool and myocardium volume as well as a local thickness map for each generated mesh.
             </p>
                              
@@ -266,8 +266,8 @@ class MeshGenerationApp(QWidget):
             <p style="margin-bottom: 8px;"><strong>1. Load MRI Data:</strong></p>
             <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
             Click on <em>Select Segmented Data...</em> and select the folder containing the MRI images in either DICOM or NIfTI format. 
-            You should have a folder containg all DICOM or NIfTI files for one patient. The individual MRI series of that patient, that are already segmented, should be in seperate subfolders.
-            For example the you should have the folder for patient X that contains a subfolder for an acquired SAX MRI series and a subfolder for an acquired LAX MRI series.
+            You should have a folder containing all DICOM or NIfTI files for one patient. The individual MRI series of that patient, that are already segmented, should be in separate subfolders.
+            For example you should have the folder for patient X that contains a subfolder for an acquired SAX MRI series and a subfolder for an acquired LAX MRI series.
             </p>
             
             <p style="margin-bottom: 8px;"><strong>2. Select Output Folder:</strong></p>
@@ -340,7 +340,7 @@ class MeshGenerationApp(QWidget):
             
             <p style="margin-bottom: 8px;"><strong>2. Calculate Thickness:</strong></p>
             <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
-            Computes local thickness map for each generated mesh. The x axis of the thickness map describing the normalized time and the y axis describing the thickness at a given z height averaged over all azimuthal angels.
+            Computes local thickness map for each generated mesh. The x axis of the thickness map describing the normalized time and the y axis describing the thickness at a given z height averaged over all azimuthal angles.
             </p>
         </div>
                              
@@ -373,10 +373,17 @@ class MeshGenerationApp(QWidget):
             Time-series plots showing blood pool and myocardial volume throughout the cardiac cycle 
             calculated from the generated meshes.
             </p>
+
+            <p style="margin-bottom: 8px;"><strong>3. Local Thickness Estimation:</strong></p> 
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;"> 
+            Local thickness map for each generated mesh. The x axis of the thickness map describing the normalized time and the 
+            y axis describing the thickness at a given z height averaged over all 
+            </p>
                              
             <p style="margin-bottom: 8px;"><strong>3. Fit of Meshes to Segmentation Masks:</strong></p>
-            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
-            Dice scores between segmentation masks and generated mesh for both the blood pool and the myocardium.
+            <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;"> 
+            Mean and standard deviation of Dice scores between the segmentation masks and the generated mesh calculated for the blood pool and myocardium. 
+            All time points with an available mesh fit were included.
             </p>
                              
             <p style="margin-bottom: 8px;"><strong>4. Computed Cardiac Function Parameters:</strong></p>

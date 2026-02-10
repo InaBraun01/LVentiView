@@ -397,8 +397,8 @@ class DicomAnalysisApp(QWidget):
             <p style="margin-bottom: 8px;"><strong>1. Load MRI Data:</strong></p>
             <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
             Click on <em>Browse MRI Data...</em> and select the folder containing the MRI images in either DICOM or NIfTI format. 
-            You should have a folder containg all DICOM or NIfTI files for one patient. The individual MRI series of that patient, that should be segmented, should be in seperate subfolders.
-            For example the you should have the folder for patient X that contains a subfolder for an acquired SAX MRI series and a subfolder for an acquired LAX MRI series.
+            You should have a folder containing all DICOM or NIfTI files for one patient. The individual MRI series of that patient, that should be segmented, should be in separate subfolders.
+            For example you should have the folder for patient X that contains a subfolder for an acquired SAX MRI series and a subfolder for an acquired LAX MRI series.
             </p>
             
             <p style="margin-bottom: 8px;"><strong>2. Select Output Folder:</strong></p>
@@ -426,13 +426,13 @@ class DicomAnalysisApp(QWidget):
             </ul>
         </div>
 
-        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;">
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;"> 
             <p style="margin-bottom: 10px; font-weight: 600;">Manual Cleaning of SAX and LAX slices:</p>
-            <ul style="margin: 0; padding-left: 25px; font-size: 12px;">
-                <li style="margin-bottom: 6px;"><strong>Z Slices to Remove:</strong> Comma-separated list of slice indices to manually exclude (e.g., 1,2,5)</li>
-                <li style="margin-bottom: 6px;"><strong>Time Steps to Remove:</strong> Comma-separated list of time frame indices to manually exclude</li>
-            </ul>
-        </div>
+                <ul style="margin: 0; padding-left: 25px; font-size: 12px;"> 
+                    <li style="margin-bottom: 6px;"> <strong>Z Slices to Remove:</strong> For MRI series that should be segmented, provide a list of z-slice indices to remove (starting at 0).
+                            List one series per line and ensure the correct series name is used. <br><br> <em>Example:</em><br> CINELAX_301: 0,1,2,3<br> CINESAX_300: 0,1,4 </li>       
+                    <li style="margin-bottom: 6px;"> <strong>Time Steps to Remove:</strong> For MRI series that should be segmented, provide a list of time-frame indices to remove (starting at 0). 
+                             List one series per line and ensure the correct series name is used. <br><br> <em>Example:</em><br> CINELAX_301: 0,11<br> CINESAX_300: 0,12,13 </li> </ul> </div>
 
         <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
         Select Postprocessing Steps

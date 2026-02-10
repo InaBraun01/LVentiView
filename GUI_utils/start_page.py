@@ -268,8 +268,8 @@ class StartPage(QWidget):
          <ul style="margin: 0; padding-left: 20px;">
          <li style="margin-bottom: 6px;"><strong>Segmentation:</strong> Automatic segmentation of left ventricle, blood pool and right ventricle from cardiac MRI.</li>
          <li style="margin-bottom: 6px;"><strong>Data cleaning:</strong> For <strong>SAX MRI series</strong>: Automatic removal of incomplete time points and slices above the mitral valve and above the apex. 
-                                                                         For <strong>LAX MRI series</strong>: Automatic removal of incomplete time points and easy manual removal of slices infront of or behind left ventricle.</li>
-         <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Calculation of myocardial and blood pool volumes from the Segmentation masks of SAX MRI series using Simpson's Method</li>
+                                                                         For <strong>LAX MRI series</strong>: Automatic removal of incomplete time points and easy manual removal of slices in front of or behind left ventricle.</li>
+         <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Calculation of myocardial and blood pool volumes from the segmentation masks of SAX MRI series using Simpson's Method</li>
          <li style="margin-bottom: 6px;"><strong>Cardiac cycle analysis:</strong> Automated ED/ES state identification and SV/EF calculation</li>
          </ul>
          </div>
