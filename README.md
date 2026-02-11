@@ -63,40 +63,67 @@
 
 <!-- About the Project -->
 ## About the Project
-Accurate quantification of left ventricular cavity volume (LVV) and ejection fraction (EF) from cardiac magnetic resonance imaging (MRI) is essential for diagnosis and prognosis in cardiovascular care. However, current clinical methods for calculating EF are subject to substantial measurement uncertainty, primarily due to variability in manual segmentation and the use of basic geometric assumptions for interpolation between acquired 2D MRI slices. To address these challenges, LVentiView, an open-source Python platform with a graphical user interface, was developed. The platform integrates automated MRI segmentation, three-dimensional (3D) mesh generation, volumetric analysis, and regional myocardial thickness calculation. Accuracy of the volume calculation was assessed using an idealized left ventricular geometry with known ground-truth volumes. The software was further evaluated on clinical cardiac MRI datasets. LVentiView successfully performed automated segmentation and mesh-based 3D reconstruction, enabling accurate quantification of LVV and regional wall thickness for both an idealized geometry and clinical MRI datasets. By combining automation with an intuitive interface, LVentiView provides a user-friendly tool for quantifying LVV, EF, and regional myocardial thickness. It is designed with potential for integration into clinical practice.
+Accurate quantification of left ventricular cavity volume (LVV) and ejection fraction (EF) from cardiac magnetic resonance imaging (MRI) is essential for diagnosis and prognosis in cardiovascular care. However, current clinical methods for calculating EF are subject to substantial measurement uncertainty, primarily due to variability in manual segmentation, the use of basic geometric assumptions for interpolation between acquired 2D MRI slices and sampeling the entire extent of the LV. To address these challenges, LVentiView, an open-source Python platform with a graphical user interface, was developed. The platform integrates automated MRI segmentation, three-dimensional (3D) mesh generation, volumetric analysis, and regional myocardial thickness calculation. Accuracy of the volume calculation was assessed using an idealized left ventricular geometry with known ground-truth volumes. The software was further evaluated on clinical cardiac MRI datasets. LVentiView successfully performed automated segmentation and mesh-based 3D reconstruction, enabling accurate quantification of LVV and regional wall thickness for both an idealized geometry and clinical MRI datasets. By combining automation with an intuitive interface, LVentiView provides a user-friendly tool for quantifying LVV, EF, and regional myocardial thickness. It is designed with potential for integration into clinical practice.
 
 <!-- About the Software -->
 ## About the Software
 LVentiView is organized into two main modules: the Segmentation module and the Mesh Generation module. The software can be used either through a graphical user interface (GUI) or directly from the terminal. Regardless of the interface, the inputs and outputs remain identical.
 
-<!-- Graphical User Interphase -->
-## Graphical User Interphase
+## Getting Started
+To use either the graphical user interface (GUI) or the code directly from the terminal, simply download the current release of LVentiView [software package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.0) and follow the instructions below. 
 
-### Installation  
-To install the graphical user interface (GUI), simply download the **.zip file** for your operating system and follow the instructions below. 
-
-#### Linux & macOS  
-1. Download the app (.zip file).  
-2. Unzip the app to extract the `.app` file.  
-3. Move the extracted `.app` file to your `/Applications` folder.  
-4. You can now open **LVentiView** like any other application.  
+1. Download the current release [software package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.0)
+2. In the downloaded folder containing the code (LVentiView), create a new folder called (SegmentationModels)
+3. Move the downloaded files containing NN weights (pytorch_my_LAX_Model.pth and pytorch_my_model.pth) into the folder SegmentationModels
+4. Continue with setting up the python virtual environment needed
 
 
-#### Windows  
-1. Download the installer.  
-2. Run the installer and follow the on-screen instructions.  
-3. Once installed, open **LVentiView** from the Start Menu or Desktop shortcut.
-   
----
-Alternatively, you can clone the repository, set up the [Python Virtual Environment](#python-virtual-environment), and launch the GUI from the terminal. To do this, first activate the Python environment, then run:
-1. **Activate the Python virtual environment**:
+### Python Virtual Environment
+The first step to using LVentiView is to set up a python virtual environment as described below. If you are more comfortable working with a conda environment that is ofcourse also possible just install the same dependencies as listed down below. 
+
+1. **Create and activate a python virtual environment**:
+
+```bash
+python3 -m venv ~/lventiview_env
+source ~/lventiview_env/bin/activate
+```
+
+2. **Upgrade pip**:
+```bash
+pip install --upgrade pip
+```
+
+3. **Install required Python packages:**
+```bash
+pip install numpy==1.23.5 \
+            pyvista==0.42.3 \
+            scipy==1.10.1 \
+            pydicom==2.4.4 \
+            meshio==5.3.5 \
+            tqdm==4.66.4 \
+            imageio==2.33.1 \
+            scikit-image==0.19.3 \
+            torch torchvision torchaudio \
+            pandas==2.0.3 \
+            seaborn==0.13.2 \
+            onnx2torch==1.5.15 \
+            PyQt5==5.15.10
+```
+
+4. **Activate the Python virtual environment**:
 ```bash
 source ~/lventiview_env/bin/activate
 ```
-2. **Open the GUI**:
+
+Now you can either launche the GUI from the terminal and work with the graphical user interphase or you can continue to run the software from the terminal.
+
+## Launching the GUI from the terminal
+First make sure that you have created and activated the python environment as described above. Next you can simply open the GUI by running 
+1. **Open the GUI**:
 ```bash
   python LVentiView.py
 ```
+This opens the start page of the GUI from which you can navigate to the pages of the **Segmentation Module** as well as the **Mesh Generation Module** .
 
 ---
 ### Start Page
@@ -143,45 +170,8 @@ The workflow is automated but fully configurable—users can adjust fitting para
 
 <!-- Running LVentiView from the Terminal -->
 ## Running LVentiView from the Terminal
-You can also run the software via the terminal without a graphical-user interphase. To do this you need to set up a conda environment or [Python Virtual Environment](#python-virtual-environment). In this Read Me file I describe how to set up the python environment. 
-
-### Python Virtual Environment
-1. **Create and activate a python virtual environment**:
-
-```bash
-python3 -m venv ~/lventiview_env
-source ~/lventiview_env/bin/activate
-```
-
-2. **Upgrade pip**:
-```bash
-pip install --upgrade pip
-```
-
-3. **Install required Python packages:**
-```bash
-pip install numpy==1.23.5 \
-            pyvista==0.42.3 \
-            scipy==1.10.1 \
-            pydicom==2.4.4 \
-            meshio==5.3.5 \
-            tqdm==4.66.4 \
-            imageio==2.33.1 \
-            scikit-image==0.19.3 \
-            torch torchvision torchaudio \
-            pandas==2.0.3 \
-            seaborn==0.13.2 \
-            onnx2torch==1.5.15 \
-            PyQt5==5.15.10
-```
-
-### Running LVentiView
-To use the **Segmentation** and **Mesh Generation modules** from the terminal, follow these steps
-1. **Activate the Python virtual environment**:
-```bash
-source ~/lventiview_env/bin/activate
-```
-2. **Specify the input and output folders**:
+You can also run the software via the terminal without a graphical-user interphase. To do this you first need to make sure that you set up the python environment as described above and that you have activated the python environment. The you can follow the following steps to use the **Segmentation** and **Mesh Generation modules** from the terminal.
+1. **Specify the input and output folders**:
 Open the ```Main.py``` file and set:
 - The path to the folder containing your MRI images.
 - The output folder where the results will be saved.
@@ -203,11 +193,6 @@ python Main.py
 <!-- Contributing -->
 ## Contributing
 Contributions are welcome! If you’d like to improve LVentiView, feel free to fork the repo, make changes, and submit a pull request.
-
-<!-- License -->
-## License
-
-Distributed under the no License. See LICENSE.txt for more information.
 
 
 <!-- Contact -->
