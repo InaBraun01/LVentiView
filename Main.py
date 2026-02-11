@@ -51,25 +51,16 @@ def load_time_frames_removed(csv_path, patient_id):
 
     return result
 
-#Lines for me to test the code
 
-data_dir = '/data.lfpn/ibraun/Code/paper_volume_calculation/Human_data/'
-output_folder='outputs_patient_data/LAX_results_128' 
+#Path to directory contain data to segment 
+#data directory should contain one folder per patient with subfolders for the individual MRI series (e.g. one subfolder for SAX and one for LAX)
+#data_dir = "ADD PATH TO DIRECTORY HERE" 
 
-# datasets = [name for name in os.listdir(data_dir) 
-#                 if os.path.isdir(os.path.join(data_dir, name))]
+#Path to output folder
+#output_folder = "ADD PATH TO DIRECTORY HERE"
 
-#datasets = ["SCD4101","SCD4201","SCD4301","SCD4401","SCD4501"]
-
-# datasets = ["SCD0101", "SCD0201", "SCD0301", "SCD0401", "SCD0501", "SCD0601", "SCD0701", "SCD0801", "SCD0901", "SCD1001", "SCD1101", "SCD1201"]
-
-#datasets = ["SCD1301", "SCD1401", "SCD1501", "SCD1601", "SCD1701", "SCD1801", "SCD1901", "SCD2001", "SCD2101", "SCD2201", "SCD2301", "SCD2401"]
-
-#datasets = ["SCD2501","SCD2601","SCD2701","SCD2801","SCD2901","SCD3001", "SCD3101", "SCD3201", "SCD3301", "SCD3401", "SCD3501", "SCD3601"]
-
-# datasets = [ "SCD1501", "SCD1601", "SCD1801", "SCD2101", "SCD2901"]
-
-datasets = ["SCD1901","SCD2001","SCD2701"]
+#list of datasets contained in data_dir that you want to segment and fit a mesh to 
+#datasets = ["NAME1", "NAME2", "NAME3", ...] #ADD NAMES OF YOUR DATA SETS
 
 
 # Define valid stages
@@ -105,7 +96,20 @@ for index,dataset_to_use in enumerate(datasets):
         dict_z_slices_removed = None
         dict_time_frames_removed = None
 
+        #In case of manual cleaning add the path to a csv file which list for each patient which Z HEIGHTS to remove 
+        #the format should be the following. Make sure to add the correct name for the series
+            # patient_id,series_dir,frames
+            # Patient1,Name_OF_LAX_Series,"0,1,2,3,19"
+            # Patient1,Name_OF_LAX_Series,"20,21,22,23"
+
         z_csv = os.path.join(data_dir, "Z_slices_to_remove.csv")
+
+        #In case of manual cleaning add the path to a csv file which list for each patient which TIME FRAMES to remove 
+        #the format should be the following. Make sure to add the correct name for the series
+            # patient_id,series_dir,frames
+            # Patient1,Name_OF_LAX_Series,"0,1,2,3,19"
+            # Patient1,Name_OF_LAX_Series,"20,21,22,23"
+
         t_csv = os.path.join(data_dir, "Time_frames_to_remove.csv")
 
         if os.path.exists(z_csv):
@@ -133,9 +137,6 @@ for index,dataset_to_use in enumerate(datasets):
             print(f"Series {series.name} has {series.cleaned_data.shape} and {series.prepped_data.shape} time frames after cleaning.")
             print(series.frames)
 
-
-        de.save_images(prefix="Raw")
-
         #Standardise number of time frames across all series in the DicomExam object
         print("Standardising Number of Time Frames Across Series by Resampling..")
         de.standardiseTimeframes()
@@ -157,26 +158,20 @@ for index,dataset_to_use in enumerate(datasets):
         de.estimate_landmarks()
         de.save()
 
-        #de = loadDicomExam(input_path,output_folder)
-
-        # print("Cleaning data...")
-        # Clean MRI data based on Segmentations
-        # de.clean_data(remove_z_slices = [0,1,2,3,4,10,11,12])
+        print("Cleaning data...")
+        #Clean MRI data based on Segmentations
+        de.clean_data()
 
         print("Estimate MRI orientation...")
         estimate_MRI_orientation(de)
 
-        # print("Save Cleaned Visualization of Segmentation Results ..")
-        # #Save a visualisation of the cleaned MRI data with the generated segmentation masks
-        # de.save_images(prefix='Clean')
+        print("Save Cleaned Visualization of Segmentation Results ..")
+        #Save a visualisation of the cleaned MRI data with the generated segmentation masks
+        de.save_images(prefix='Clean')
     
         print("Analyse segmentation masks...")
         #compute blood pool volumes, myocardial volumes, ESV, EDV, SV, EF using Simpsons method
         compute_cardiac_parameters(de,'seg')
-
-        # print("Calculate Local Thickness...")
-        # #calculate local thickness from segmentation masks
-        # seg_masks_compute_thickness_map(de)
 
         print("Saving analysis object...")
         #Save object of type DicomExam as pickel file
@@ -209,7 +204,7 @@ for index,dataset_to_use in enumerate(datasets):
                     # Fit 3D Volumetric meshes to the generated Segmentation masks
                     df_end_dice = fit_mesh(
                         de,
-                        fitting_steps=10000,
+                        fitting_steps=5000,
                         slice_shift_penalty_weigth= 100,
                         time_frames_to_fit="all",
                     )
@@ -239,7 +234,7 @@ for index,dataset_to_use in enumerate(datasets):
                         # Fit mesh for this chunk
                         df_chunk_dice = fit_mesh(
                             de,
-                            fitting_steps=10000,
+                            fitting_steps=5000,
                             slice_shift_penalty_weigth= 100,
                             time_frames_to_fit=time_frames_chunk,
                         )
