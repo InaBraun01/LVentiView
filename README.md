@@ -1,7 +1,7 @@
 <div align="center">
 
 
-  <img src="assets/logo.png" alt="logo" width="200" height="auto" />
+  <img src="Images/icon.png" alt="logo" width="200" height="auto" />
   <h1>LVentiView</h1>
   
   <p>
