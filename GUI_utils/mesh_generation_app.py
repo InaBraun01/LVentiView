@@ -499,8 +499,8 @@ class MeshGenerationApp(QWidget):
         
         fitting_params = [
             ('time_frames_to_fit', 'Time Frames to be Fit', 'all'),
-            ('fitting_steps', 'Fitting Steps', '1'),
-            ('lr', 'Learning Rate', '0.003'),
+            ('fitting_steps', 'Fitting Steps', '150'),
+            ('lr', 'Learning Rate', '0.095'),
             ('num_modes', 'Number of Modes', '25'),
         ]
         
