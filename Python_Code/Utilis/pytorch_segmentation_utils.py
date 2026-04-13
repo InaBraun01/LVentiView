@@ -31,8 +31,7 @@ def produce_segmentation_at_required_resolution(data, pixel_spacing, is_sax=True
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # device = "cpu"
     model_path = "SegmentationModels/pytorch_my_model.pth" if is_sax else "SegmentationModels/pytorch_my_LAX_model.pth"
-    print(model_path)
-    model = torch.load(model_path, map_location=device)
+    model = torch.load(model_path, map_location=device, weights_only=False)
     model.eval()
 
     #Perform Segmentation

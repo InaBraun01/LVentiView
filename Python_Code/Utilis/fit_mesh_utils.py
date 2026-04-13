@@ -350,9 +350,9 @@ def set_initial_mesh_alignment(dicom_exam, mesh_axes, warp_and_slice_model, se):
 
     # Determine valve direction from DICOM data
     valve_direction = dicom_exam.rv_direction if dicom_exam.valve_center is None else dicom_exam.aortic_valve_direction
-    
 
-    # # Calculate additional rotation for RV direction alignment
+
+    # Calculate additional rotation for RV direction alignment
     rotM2 = getRotationMatrix(new_mesh_rv_direction, valve_direction)
     rotM = np.dot(rotM2, rotM)
 
@@ -574,15 +574,13 @@ def get_time_frames_to_fit(dicom_exam, time_frames_to_fit, burn_in_length, num_c
         return time_frames_to_fit
 
 
-def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel, 
+def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel,
                               mesh_offset, learned_inputs, tensor_labels, save_mesh=True):
     """
     Save mesh fitting results after training completion.
-    
     Args:
         dicom_exam: DICOM examination object
         outputs: Network outputs
-        time_frame (int): Current time frame
         eli: Mesh evaluator
         se: Slice extractor
         sz (int): Image size
@@ -591,54 +589,59 @@ def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel,
         learned_inputs: Neural network
         tensor_labels: Ground truth labels
         save_mesh (bool): Whether to save mesh files
-        
     Returns:
-        float: Final Dice coefficient
+        tuple: d0_values, d1_values, and per-series dice lists
+               (d0_values_series, d1_values_series) each of shape [n_series][n_timeframes]
     """
-    # Generate final mesh and rendered results
     msh, rescale_modes = eli()
+
+    # Compute slice boundaries for each series
+    series_boundaries = []
+    cumulative = 0
+    for series in dicom_exam.series:
+        start = cumulative
+        end   = cumulative + series.slices
+        series_boundaries.append((start, end))
+        cumulative = end
+
+    n_series = len(dicom_exam.series)
 
     d0_values = []
     d1_values = []
-
-    d0_values_series_1 = []
-    d1_values_series_1 = []
-
-    d0_values_series_2 = []
-    d1_values_series_2 = []
-
+    d0_values_series = [[] for _ in range(n_series)]
+    d1_values_series = [[] for _ in range(n_series)]
 
     for index, time_step in enumerate(dicom_exam.time_frames_to_fit):
-    
-        d0 = dice_loss(outputs[index][:,:1], tensor_labels[:,:1,:,:,:,time_step])  # Myocardium
-        d1 = dice_loss(outputs[index][:,1:], tensor_labels[:,1:,:,:,:,time_step])  # Blood pool
 
+        # Overall dice across all series
+        d0 = dice_loss(outputs[index][:, :1], tensor_labels[:, :1, :, :, :, time_step])
+        d1 = dice_loss(outputs[index][:, 1:], tensor_labels[:, 1:, :, :, :, time_step])
         d0_values.append(d0.item())
         d1_values.append(d1.item())
 
-        d0_series_1 = dice_loss(outputs[index][:,:1][:,:,:,:,:dicom_exam.series[0].slices], tensor_labels[:,:1,:,:,:,time_step][:,:,:,:,:dicom_exam.series[0].slices])  # Myocardium
-        d1_series_1 = dice_loss(outputs[index][:,1:][:,:,:,:,:dicom_exam.series[0].slices], tensor_labels[:,1:,:,:,:,time_step][:,:,:,:,:dicom_exam.series[0].slices])  # Blood pool
+        # Per-series dice using computed boundaries
+        for i, (start, end) in enumerate(series_boundaries):
+            d0_s = dice_loss(
+                outputs[index][:, :1][..., start:end],
+                tensor_labels[:, :1, :, :, :, time_step][..., start:end]
+            )
+            d1_s = dice_loss(
+                outputs[index][:, 1:][..., start:end],
+                tensor_labels[:, 1:, :, :, :, time_step][..., start:end]
+            )
+            d0_values_series[i].append(d0_s.item())
+            d1_values_series[i].append(d1_s.item())
 
-        d0_values_series_1.append(d0_series_1.item())
-        d1_values_series_1.append(d1_series_1.item())
-
-        d0_series_2 = dice_loss(outputs[index][:,:1][:,:,:,:,dicom_exam.series[0].slices:], tensor_labels[:,:1,:,:,:,time_step][:,:,:,:,dicom_exam.series[0].slices:])  # Myocardium
-        d1_series_2 = dice_loss(outputs[index][:,1:][:,:,:,:,dicom_exam.series[0].slices:], tensor_labels[:,1:,:,:,:,time_step][:,:,:,:,dicom_exam.series[0].slices:])  # Blood pool
-
-        d0_values_series_2.append(d0_series_2.item())
-        d1_values_series_2.append(d1_series_2.item())
-
-        # Store rendered and sliced mesh in DICOM exam object for visulization
+        # Store rendered and sliced mesh
         ones_input = torch.Tensor(np.ones((1, 1))).to(device)
-        mesh_render = getSlices(se, msh[index], sz, use_bp_channel, mesh_offset, learned_inputs, ones_input, index)
-
+        mesh_render = getSlices(se, msh[index], sz, use_bp_channel,
+                                mesh_offset, learned_inputs, ones_input, index)
         dicom_exam.fitted_meshes[time_step] = {}
         dicom_exam.fitted_meshes[time_step].setdefault('rendered_and_sliced', []).append(
-            np.transpose(outputs[index].cpu().numpy()[0], (3, 1, 2, 0)))
-        
+            np.transpose(outputs[index].cpu().numpy()[0], (3, 1, 2, 0))
+        )
 
         if save_mesh:
-            # Create output directory
             output_folder = dicom_exam.folder['meshes']
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
@@ -647,18 +650,16 @@ def save_results_post_training(dicom_exam, outputs, eli, se, sz, use_bp_channel,
             if not os.path.exists(output_folder_csv):
                 os.makedirs(output_folder_csv)
 
-            # Save mesh as VTK file
-            mesh_filename = os.path.join(output_folder, "mesh_t=%d.vtk" % time_step) #these two meshes are exactly the same 
+            mesh_filename = os.path.join(output_folder, "mesh_t=%d.vtk" % time_step)
             meshio.write(mesh_filename, msh[index])
 
-            # Save PCA mode coefficients as CSV
             csv_filename = os.path.join(output_folder_csv, "mesh_t=%d.csv" % time_step)
             with open(csv_filename, 'w', newline='') as file:
                 writer = csv.writer(file)
                 for coefficient in rescale_modes[index]:
                     writer.writerow([coefficient])
 
-    return d0_values ,d1_values, d0_values_series_1, d1_values_series_1, d0_values_series_2, d1_values_series_2
+    return d0_values, d1_values, d0_values_series, d1_values_series
 
 
 def getSlices(se, mesh, sz, use_bp_channel, mesh_offset, learned_inputs, ones_input, index):

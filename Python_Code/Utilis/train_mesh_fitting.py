@@ -194,17 +194,14 @@ def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method, optimi
 
     # Restore best model weights
     if best_outputs is not None:
-        print("Before:", learned_inputs.state_dict()[param_name][0,0].item())
         li_model.load_state_dict({key: value.to(device) for key, value in best_li_model.items()})
 
         param_name = "modes_output_layer.weight"
         
         learned_inputs.load_state_dict({key: value.to(device) for key, value in best_learned_inputs.items()})
-        print("After :", learned_inputs.state_dict()[param_name][0,0].item())
 
         warp_and_slice_model.load_state_dict({key: value.to(device) for key, value in best_warp_and_slice_model.items()})
         pcaD.load_state_dict({key: value.to(device) for key, value in best_pcaD.items()})
-        print("Hello")
         print(f"\nRestored best model from step {best_step} with dice loss: {best_dice_loss:.6f}") 
 
         # Return the best outputs (move back to device if needed)
@@ -215,102 +212,8 @@ def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method, optimi
     else:
         final_outputs = outputs #, learned_inputs
 
-    print("Bye")
     return final_outputs #, learned_inputs
 
-# def should_continue_training(i, df_myo_dice, df_bp_dice, fitting_steps, dicom_exam, 
-#                             best_mean_dice_info, no_improvement_counter, 
-#                             myo_threshold=0.85, patience=10):
-#     """
-#     Determine whether to continue training based on dice scores.
-    
-#     Stops if:
-#     1. Myocardium dice score >= threshold, OR
-#     2. Mean of (myocardium + blood pool) dice hasn't improved for 'patience' steps
-    
-#     When stopping due to no improvement, loads the dicom_exam from the best step.
-    
-#     Args:
-#         i: Current training step
-#         df_myo_dice: DataFrame of myocardium dice scores
-#         df_bp_dice: DataFrame of blood pool dice scores
-#         fitting_steps: Maximum number of training steps
-#         dicom_exam: Exam object containing folder information
-#         best_mean_dice_info: Dict tracking {'mean_dice': float, 'step': int, 'input_path': str, 'output_folder': str}
-#         no_improvement_counter: Counter for steps without improvement
-#         myo_threshold: Threshold for myocardium dice score (default: 0.85)
-#         patience: Number of steps without improvement before stopping (default: 10)
-    
-#     Returns:
-#         tuple: (bool: continue training, dict: updated best_mean_dice_info, int: updated counter, dicom_exam or None)
-#     """
-    
-#     if len(df_myo_dice) > 0:
-#         last_myo_dice = df_myo_dice.iloc[-1].mean()
-#         last_bp_dice = df_bp_dice.iloc[-1].mean()
-#         current_mean_dice = (last_myo_dice + last_bp_dice) / 2
-        
-#         # Check if current mean dice is better than best recorded
-#         if current_mean_dice > best_mean_dice_info['mean_dice']:
-#             best_mean_dice_info['mean_dice'] = current_mean_dice
-#             best_mean_dice_info['step'] = i
-#             no_improvement_counter = 0
-            
-#             # Save dicom_exam when new best is found
-#             print(f'New best mean dice: {current_mean_dice:.3f} at step {i} - Saving dicom_exam')
-#             dicom_exam.save()
-#         else:
-#             no_improvement_counter += 1
-        
-#         # Stopping condition 1: Myocardium dice above threshold
-#         if last_myo_dice >= myo_threshold:
-#             print("Myocardium dice above threshold - Early Stopping activated:")
-#             print(f'Step {i}: Myocardium dice: {last_myo_dice:.3f}, Blood pool dice: {last_bp_dice:.3f}')
-#             print(f'Best mean dice: {best_mean_dice_info["mean_dice"]:.3f} at step {best_mean_dice_info["step"]}')
-            
-#             with open(dicom_exam.folder['base'] + '/numbers_epochs_fit.csv', 'a', newline='') as f:
-#                 writer = csv.writer(f)
-#                 writer.writerow([i, best_mean_dice_info['step'], 'threshold_reached'])
-#             return False, best_mean_dice_info, no_improvement_counter, None
-        
-#         # Stopping condition 2: No improvement in mean dice for 'patience' steps
-#         if no_improvement_counter >= patience:
-#             print("No improvement in mean dice - Early Stopping activated:")
-#             print(f'Step {i}: No improvement for {patience} steps')
-#             print(f'Current - Myocardium dice: {last_myo_dice:.3f}, Blood pool dice: {last_bp_dice:.3f}, Mean: {current_mean_dice:.3f}')
-#             print(f'Best mean dice: {best_mean_dice_info["mean_dice"]:.3f} at step {best_mean_dice_info["step"]}')
-#             print(f'Loading dicom_exam from best step {best_mean_dice_info["step"]}...')
-            
-#             # Load the best dicom_exam
-#             from your_module import loadDicomExam  # Import your loadDicomExam function
-#             best_dicom_exam = loadDicomExam(best_mean_dice_info['input_path'], 
-#                                            best_mean_dice_info['output_folder'])
-            
-#             with open(dicom_exam.folder['base'] + '/numbers_epochs_fit.csv', 'a', newline='') as f:
-#                 writer = csv.writer(f)
-#                 writer.writerow([i, best_mean_dice_info['step'], 'no_improvement'])
-#             return False, best_mean_dice_info, no_improvement_counter, best_dicom_exam
-        
-#         # Continue if max steps not reached
-#         if i < fitting_steps:
-#             return True, best_mean_dice_info, no_improvement_counter, None
-#         else:
-#             print(f"Maximum steps reached: {fitting_steps}")
-#             print(f'Best mean dice: {best_mean_dice_info["mean_dice"]:.3f} at step {best_mean_dice_info["step"]}')
-#             print(f'Loading dicom_exam from best step {best_mean_dice_info["step"]}...')
-            
-#             # Load the best dicom_exam
-#             from your_module import loadDicomExam  # Import your loadDicomExam function
-#             best_dicom_exam = loadDicomExam(best_mean_dice_info['input_path'], 
-#                                            best_mean_dice_info['output_folder'])
-            
-#             with open(dicom_exam.folder['base'] + '/numbers_epochs_fit.csv', 'a', newline='') as f:
-#                 writer = csv.writer(f)
-#                 writer.writerow([i, best_mean_dice_info['step'], 'max_steps'])
-#             return False, best_mean_dice_info, no_improvement_counter, best_dicom_exam
-#     else:
-#         # First step, no dice scores yet
-#         return i < fitting_steps, best_mean_dice_info, no_improvement_counter, None
 
 def should_continue_training(i, df_myo_dice, df_bp_dice, fitting_steps, dicom_exam):
     """
@@ -331,7 +234,7 @@ def should_continue_training(i, df_myo_dice, df_bp_dice, fitting_steps, dicom_ex
         last_myo_dice = df_myo_dice.iloc[-1].mean()
         last_bp_dice = df_bp_dice.iloc[-1].mean()
     
-        if last_myo_dice >= 0.85:
+        if last_myo_dice >= 1.0: #threshold was 0.85
             print("Dice Scores are high enough Early Stopping activated:")
             print(f'Myocardium dice: {last_myo_dice:.3e}, Blood pool dice: {last_bp_dice:.3e}')
             # Append current step to CSV

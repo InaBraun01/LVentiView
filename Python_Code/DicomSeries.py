@@ -4,8 +4,9 @@ DICOM Series Management
 This module provides a class for handling individual DICOM series within a cardiac MRI exam.
 Each series represents a specific imaging sequence (e.g., short-axis, 2-chamber, 4-chamber views).
 """
-
+import sys
 import numpy as np
+import pandas as pd
 from Python_Code.Utilis.folder_utils import path_leaf
 from Python_Code.Utilis.load_Dicom import dataArrayFromDicom, dataArrayFromNifti
 
@@ -38,6 +39,7 @@ class DicomSeries(object):
         # Store path information
         self.full_path = full_path
         self.series_folder_name = path_leaf(full_path).lower().split('.')[0]
+
         self.name = self.series_folder_name if id_string is None else id_string
         self.z_height_remove = z_height_remove
         self.time_frame_remove = time_frame_remove
@@ -59,12 +61,14 @@ class DicomSeries(object):
             # Store DICOM metadata
             self.orientation = np.array(list(dicom_details['ImageOrientation']))
         
+
         self.data = data
         self.pixel_spacing = pixel_spacing
         self.image_ids = image_ids
         self.dicom_details = dicom_details
         self.slice_locations = slice_locations
         self.trigger_times = trigger_times
+        
         self.image_positions = image_positions
         self.is3D = is3D
         self.multifile = multifile

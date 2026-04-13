@@ -127,7 +127,6 @@ class DicomExam:
 
         # Load each series (excluding RV series)
         for series_dir in ordered_series:
-            print(series_dir)
             full_path = os.path.join(self.base_dir, series_dir)
             
             # Skip RV-specific series
@@ -195,34 +194,18 @@ class DicomExam:
         """
         for series in self:
 
-            if series.view not in ['SAX', 'unknown']:
+            if series.view in ['SAX', 'unknown']:
 
-                if remove_time_steps == []:
-                    remove_time_steps = None
+                if remove_time_steps:
+                    remove_time_steps = [x - 1 for x in remove_time_steps]
+                    incomplete_frames = clean_time_frames(series, slice_threshold,remove_time_steps)
 
-                if remove_z_slices == []:
-                    remove_z_slices = None
+                else:
+                    incomplete_frames = clean_time_frames(series, slice_threshold)
 
-                # if remove_time_steps:
-                #     remove_time_steps = [x - 1 for x in remove_time_steps]
-                #     incomplete_frames = clean_time_frames(series, slice_threshold,remove_time_steps)
 
-                # else:
-                #     incomplete_frames = clean_time_frames(series, slice_threshold)
-
-                if remove_z_slices:
-                    remove_z_slices = [x - 1 for x in remove_z_slices]
-                    clean_slices_apex(series, percentage_apex,remove_z_slices)
-
-                # else:
-                #     # Remove planes above base
-                #     clean_slices_base(series,incomplete_frames,percentage_base)
-
-                #     # Remove slices below apex
-                #     apex_slices = clean_slices_apex(series, percentage_apex)
-
-                # # Update time frame count after cleaning
-                # self.time_frames = self.time_frames - len(incomplete_frames)
+                # Update time frame count after cleaning
+                self.time_frames = self.time_frames - len(incomplete_frames)
 
                 #Postprecess cleaned data: Calculate world coordinates and new crop
                 postprocess_cleaned_data(self)
@@ -259,9 +242,7 @@ class DicomExam:
 
         if resample_to == 'fewest':
             #downsample to smallest time resolution:
-            print(time_frames_seen)
             target_slices = np.min(time_frames_seen)
-            print(target_slices)
         else: 
             #otherwise upsample to highest temporal resolution:
             target_slices = np.max(time_frames_seen)
@@ -276,14 +257,6 @@ class DicomExam:
             if s.frames != target_slices:
                 s.prepped_data = zoom(s.data, (target_slices/s.data.shape[0],1,1,1), order=1) #zoom of data in time direction so that number of target slices is reached, while not inducing any change in other directions
                 s.cleaned_data = zoom(s.data, (target_slices/s.data.shape[0],1,1,1), order=1) #zoom of data in time direction so that number of target slices is reached, while not inducing any change in other directions
-                # is_sax = (s.view in ['SAX', 'unknown'])
-                # dat, seg, c1, c2 = produceSegAtRequiredRes(resampled_data, s.pixel_spacing, is_sax, use_tta)
-                # sz = 128
-                # c1 = np.clip(c1-sz//2, 0, seg.shape[2]-sz) 
-                # c2 = np.clip(c2-sz//2, 0, seg.shape[3]-sz) 
-                # s.prepped_seg_resampled = np.transpose(seg[:,:,c1:c1+sz,c2:c2+sz], (0,1,3,2))
-                # s.prepped_data_resampled = np.transpose(dat[:,:,c1:c1+sz,c2:c2+sz], (0,1,3,2))
-                # s.resampled = True
                 s.frames = target_slices
 
         self.time_frames = target_slices
@@ -348,9 +321,9 @@ class DicomExam:
 
             # Save image
             if prefix:
-                filename = f'{prefix}_{series.name}_{filename}.pdf'
+                filename = f'{prefix}_{series.name}_{filename}.png'
             else:
-                filename = f'{series.name}_{filename}.pdf'
+                filename = f'{series.name}_{filename}.png'
 
             imageio.imwrite(os.path.join(output_folder, filename), img)
 
@@ -438,7 +411,6 @@ class DicomExam:
 
         init_mode = 1
         if init_mode == 0:
-            print("init mode is 0")
             all_slices = []
             for s in self:
                 all_slices.extend(s.XYZs)
@@ -447,7 +419,6 @@ class DicomExam:
 			
 
         elif init_mode == 1:
-            print("init mode is 1")
             all_slices = []
             for s in self:
                 if s.view == 'SAX':
@@ -457,7 +428,6 @@ class DicomExam:
                     else:
                         for k in range(len(s.XYZs)):
                             if not s.slice_above_valveplane[0,k]:
-                                print(k)
                                 all_slices.append(s.XYZs[k])
                 else:
                     all_slices.extend(s.XYZs)
@@ -518,18 +488,12 @@ class DicomExam:
                         continue
                     
                     for i in range(len(RV)):
-                        # if s.uncertainty is not None and np.mean(s.uncertainty[j,i],axis=-1) < 0.25:
                         if s.uncertainty is not None and np.mean(s.uncertainty[j,i],axis=-1) > 0.75:
-                            # print(j, 'uncertain')
                             continue
                         if s.slice_above_valveplane is not None and s.slice_above_valveplane[j,i]:
-                            # print(j, 'slice_above_valveplane')
                             continue
 
-                        # print(RV[i].shape)
-                        #rv_xyzs.append(s.XYZs[i].reshape((128,128,3))[RV[i]==1])
-                        #rv_xyzs.append(s.XYZs[i].reshape((200,200,3))[RV[i]==1])
-                        rv_xyzs.append(s.XYZs[i].reshape((160,160,3))[RV[i]==1])
+                        rv_xyzs.append(s.XYZs[i].reshape((self.sz,self.sz,3))[RV[i]==1])
 
                 if len(rv_xyzs) > 0:
                     rv_xyzs = np.concatenate(rv_xyzs,axis=0)
@@ -587,129 +551,3 @@ class DicomExam:
             aortic_valve_direction = self.valve_center / np.linalg.norm(self.valve_center)
             aortic_valve_direction_projected_on_sax_plane = aortic_valve_direction - np.dot(aortic_valve_direction, self.sax_normal) * self.sax_normal
             self.aortic_valve_direction = aortic_valve_direction_projected_on_sax_plane / np.linalg.norm(aortic_valve_direction_projected_on_sax_plane)
-
-        print(self.center)
-
-        # # Initialize landmark lists for averaging across series
-        # self.vpc, self.sax_normal, self.rv_center  = [], [], []
-        
-        # # Process each SAX series
-        # for series in self:
-        #     if series.view != 'SAX':
-        #         continue
-                
-        #     if series_to_use != 'all' and series.name not in series_to_use:
-        #         continue
-
-        #     # Calculate valve plane center
-        #     if series.slice_above_valveplane is None:
-        #         # Use first slice if valve plane not estimated
-        #         self.vpc.append(np.mean(series.XYZs[0], axis=0) - self.center)
-        #     else:
-        #         # Use first slice within LV
-        #         for k in range(len(series.XYZs)):
-        #             if (not series.slice_above_valveplane[0, k] and 
-        #                 not np.sum(series.data[0, k]) == 0):
-        #                 self.vpc.append(np.mean(series.XYZs[k], axis=0) - self.center)
-        #                 break
-
-        #     # Fallback if no suitable slice found
-        #     if len(self.vpc) == 0:
-        #         self.vpc.append(np.mean(series.XYZs[0], axis=0) - self.center)
-
-        #     # Calculate short-axis normal vector
-        #     X_xyz = series.orientation[3:]
-        #     Y_xyz = series.orientation[:3]
-        #     self.sax_normal.append(np.cross(Y_xyz, X_xyz))
-
-        #     #get center of RV (relative to self.center):
-        #     rv_xyzs = []
-        #     for j in range(s.prepped_seg.shape[0]):
-                
-        #         RV = (s.prepped_seg[j] == 1)
-                
-        #         if np.sum(RV) == 0:
-        #             continue
-
-        #     for i in range(len(RV)):
-
-        #         if s.slice_above_valveplane is not None and s.slice_above_valveplane[j,i] == 0:
-        #             continue
-                
-        #         rv_xyzs.append(s.XYZs[i].reshape((self.sz,self.sz,3))[RV[i]==1])
-
-        #     if len(rv_xyzs) > 0:
-        #         rv_xyzs = np.concatenate(rv_xyzs,axis=0)
-        #         rv_center = np.mean(rv_xyzs,axis=0) - self.center
-        #         self.rv_center.append( rv_center )
-
-        # # Average landmarks across series
-        # if len(self.vpc) > 0:
-        #     self.vpc = np.mean(self.vpc, axis=0)
-        #     self.sax_normal = np.mean(self.sax_normal, axis=0)
-        #     self.rv_center = np.mean(self.rv_center, axis=0)
-        # else:
-        #     print('WARNING: No SAX slices found for landmark calculation')
-        #     self.vpc, self.sax_normal, self.rv_center, self.rv_direction = None, None, None, None
-        #     return
-
-        # # Calculate base center and distances from center
-        # max_dist_from_center = 0
-        # self.base_center = None
-        
-        # for series in self:
-        #     if series.view != 'SAX':
-        #         continue
-                
-        #     series.distance_from_center = []
-            
-        #     for k in range(len(series.XYZs)):
-        #         # Center of current slice
-        #         slice_center = np.mean(series.XYZs[k], axis=0)
-                
-        #         # Normalize SAX normal vector
-        #         n = self.sax_normal / np.linalg.norm(self.sax_normal, 2)
-                
-        #         # Project slice center onto SAX normal line
-        #         intersection_point = (self.center + 
-        #                             n * np.dot(slice_center - self.center, n))
-                
-        #         # Calculate distance from center along normal
-        #         dist_from_center = np.mean((intersection_point - self.center) / 
-        #                                  self.sax_normal)
-
-        #         series.distance_from_center.append(dist_from_center)
-                
-        #         # Track most basal slice
-        #         if dist_from_center > max_dist_from_center:
-        #             self.base_center = slice_center
-        #             max_dist_from_center = dist_from_center
-
-        # # Set default base center if none found
-        # if self.base_center is None:
-        #     for series in self:
-        #         if series.view == 'SAX':
-        #             self.base_center = np.mean(series.XYZs[0], axis=0)
-        #             break
-
-        # # Recursive call with center adjustment if needed
-        # if center_shift is None:
-        #     adjustment = self.sax_normal * (58 - max_dist_from_center)
-        #     self.estimate_landmarks(series_to_use=series_to_use, 
-        #                           center_shift=adjustment, init_mode=init_mode)
-        #     return
-
-        # rv_direction = self.rv_center / np.linalg.norm(self.rv_center)
-        # rv_direction_projected_on_sax_plane = rv_direction - np.dot(rv_direction, self.sax_normal) * self.sax_normal
-        # self.rv_direction = rv_direction_projected_on_sax_plane / np.linalg.norm(rv_direction_projected_on_sax_plane)
-
-        # # Predict aortic valve position and direction
-        # self.predict_aortic_valve_position()
-        # if self.valve_center is not None:
-        #     self.valve_center = self.valve_center - self.center
-            
-        #     # Calculate aortic valve direction projected onto SAX plane
-        #     aortic_direction = self.valve_center / np.linalg.norm(self.valve_center)
-        #     aortic_proj = (aortic_direction - 
-        #                   np.dot(aortic_direction, self.sax_normal) * self.sax_normal)
-        #     self.aortic_valve_direction = aortic_proj / np.linalg.norm(aortic_proj)

@@ -123,7 +123,7 @@ def _process_sax_series(series, masks, measurements) -> None:
     measurements['myo_volumes'].append([])
 
     pixel_volume = _calculate_pixel_volume(series)
-    print(pixel_volume)
+
 
     for time_frame in range(series.frames):
         # Calculate volumes
@@ -161,8 +161,8 @@ def _calculate_volumes_sax(masks, time_frame: int, num_slices: int,
 def _calculate_pixel_volume(series) -> float:
     """Calculate volume of a single pixel in ml."""
     return (series.pixel_spacing[0] * 
-            series.pixel_spacing[1] * 
-            series.pixel_spacing[2] * 1e-3)
+            1.0 * 
+            1.0 * 1e-3)
 
 
 def _generate_outputs(measurements, view: str, output_folders: dict, 
@@ -178,7 +178,7 @@ def _generate_outputs(measurements, view: str, output_folders: dict,
             "Volume of Blood Pool [ml]"
         ]
     
-    filename = f'{series_name}_simpson_volumes.csv'
+    filename = f'simpson_volumes.csv'
 
     # Generate plots
     for i, col in enumerate(df.columns):
@@ -206,7 +206,7 @@ def _generate_outputs(measurements, view: str, output_folders: dict,
         {'Parameter': 'SV', 'Value': cardiac_params['SV'], 'Time_step': None}
     ])
     param_df.to_csv(
-        os.path.join(output_folders['analysis'], f'{series_name}_ED_ES_state.csv'), 
+        os.path.join(output_folders['analysis'], f'ED_ES_state.csv'), 
         index=False
     )
 

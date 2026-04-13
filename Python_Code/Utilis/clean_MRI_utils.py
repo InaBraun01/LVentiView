@@ -490,8 +490,6 @@ def estimate_MRI_orientation(dicom_exam):
     for series in dicom_exam:
         if series.view != 'SAX':
             continue  # Only process SAX series
-        
-        print(series.name)
         #collect diameters 
         slice_diameter = []
         for i in range(series.prepped_seg.shape[1]):
@@ -530,12 +528,9 @@ def estimate_MRI_orientation(dicom_exam):
         start_avg = np.nansum(slice_diameter[:mid]) / mid
         end_avg = np.nansum(slice_diameter[mid:]) / (n - mid)
 
-        print( f"Start avg diameter: {start_avg}, End avg diameter: {end_avg}" )
         
         #assign orientation to MRI data
         if start_avg > end_avg:
-            print("base_top")
             dicom_exam.MRI_orientation = "base_top"
         elif start_avg < end_avg:
-            print("apex_top")
             dicom_exam.MRI_orientation = "apex_top"
