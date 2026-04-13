@@ -168,8 +168,8 @@ class StartPage(QWidget):
 
         # Description with better formatting
         description = QLabel(
-            "Advanced tools for quantifying left ventricular volume (LVV), ejection fraction (EF), "
-            "and regional myocardial thickness through automated segmentation and 3D mesh generation."
+            "LVentiView bridges medical imaging and solid-mechanics cardiac simulation by automating the full pipeline from MRI segmentation to simulation-ready volumetric meshes,"
+            "complemented by tools for volumetric analysis and regional myocardial thickness calculation."
         )
         description.setFont(QFont("Segoe UI", 12))
         description.setWordWrap(True)
@@ -286,7 +286,7 @@ class StartPage(QWidget):
          <p style="margin: 0; font-weight: 600; color: #2c3e50; margin-bottom: 8px;">Features:</p>
          <ul style="margin: 0; padding-left: 20px;">
          <li style="margin-bottom: 6px;"><strong>3D modeling:</strong> Fitting of 3D volumetric mesh to MRI segmentation masks for either a single MRI series or multiple MRI series (e.g. SAX and LAX view).</li>
-         <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Mesh-based accurate myocardial and blood pool volume calculation</li>
+         <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Mesh-based myocardial and blood pool volume calculation</li>
          <li style="margin-bottom: 6px;"><strong>Thickness analysis:</strong> Mesh-based local myocardial thickness analysis across cardiac cycles</li>
          </ul>
          </div>
