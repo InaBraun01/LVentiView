@@ -148,6 +148,31 @@ The workflow is fully automated but can be customized by adjusting thresholds, e
   <img src="Images/Segmentation_Module_LVentiView.png" alt="screenshot" />
 </div>
 
+#### Generated Outputs
+
+<p>
+This module generates the following output files and folders:
+</p>
+
+<div style="background: #f8f9fa; padding: 12px; border-radius: 6px; border-left: 4px solid #4A90E2;">
+
+<ul>
+
+<li><strong>Analysis_Simpson_Method/Segmentation_Mask/simpson_volumes.csv</strong><br>
+Myocardium and blood pool volumes calculated using Simpson’s method.</li>
+
+<li><strong>Analysis_Simpson_Method/Segmentation_Mask/ED_ES_states.csv</strong><br>
+End-diastolic (ED) and end-systolic (ES) states derived from Simpson-based volumes.</li>
+
+<li><strong>Analysis_Simpson_Method/Segmentation_Mask/Plots/</strong><br>
+Plots of blood pool and myocardial volume over the cardiac cycle.</li>
+
+<li><strong>DicomExam.pickle</strong><br>
+Serialized file containing segmented MRI data and metadata.</li>
+
+</ul>
+</div>
+
 ### Mesh Generation Module
 The **Mesh Generation Module** constructs a 3D LV model from segmented MRI data and provides LVV, EF, and myocardial thickness quantification.  
 
@@ -161,6 +186,46 @@ The workflow is automated but fully configurable—users can adjust fitting para
 
 <div align="center"> 
   <img src="Images/Mesh_Gen_Module_LVentiView.png" alt="screenshot" />
+</div>
+
+#### Generated Outputs
+
+<p>
+This module generates the following output files and folders:
+</p>
+
+<div style="background: #f8f9fa; padding: 12px; border-radius: 6px; border-left: 4px solid #4A90E2;">
+
+<ul>
+
+<li><strong>Meshes/Coefficients/</strong><br>
+CSV files containing coefficients of the reduced-dimensional mesh representation fitted to the MRI images.</li>
+
+<li><strong>Meshes/VTK_files/</strong><br>
+Generated meshes saved in VTK format.</li>
+
+<li><strong>Meshes/<i>SERIES_NAME</i>_Mesh_Visualization.png</strong><br>
+Visualization of the generated mesh overlaid on the MRI images.</li>
+
+<li><strong>Analysis_Meshes/mesh_volumes.csv</strong><br>
+Myocardium and blood pool volumes calculated from volumetric meshes.</li>
+
+<li><strong>Analysis_Meshes/ED_ES_states.csv</strong><br>
+End-diastolic (ED) and end-systolic states derived from the generated meshes.</li>
+
+<li><strong>Analysis_Meshes/ED_state.vtk</strong> and <strong>ES_state.vtk</strong><br>
+VTK files of the ED and ES meshes.</li>
+
+<li><strong>Analysis_Meshes/Plots/</strong><br>
+Plots of blood pool and myocardial volume over the cardiac cycle.</li>
+
+<li><strong>all_series_end_dice.csv</strong><br>
+Average Dice scores across all series used for fitting.</li>
+
+<li><strong><i>SERIES_NAME</i>_end_dice.csv</strong><br>
+Dice scores for the specific MRI series.</li>
+
+</ul>
 </div>
 
 ---
