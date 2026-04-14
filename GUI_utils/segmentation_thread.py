@@ -1,4 +1,4 @@
-import os
+import os,sys
 from PyQt5.QtCore import QThread, pyqtSignal
 from Python_Code.DicomExam import DicomExam
 from Python_Code.Utilis.analysis_utils import compute_cardiac_parameters
@@ -21,7 +21,12 @@ class AnalysisThread(QThread):
         super().__init__()
         self.input_folder = input_folder
         self.output_folder = output_folder
-        self.do_clean = do_clean
+
+        if clean_params['dict_z_slices_removed'] is not None or clean_params['dict_time_frames_removed'] is not None:
+            self.do_clean = False
+        else:
+            self.do_clean = do_clean
+
         self.do_cardiac = do_cardiac
         self.clean_params = clean_params or {}
         self.crop_params = crop_params or {}
@@ -36,63 +41,67 @@ class AnalysisThread(QThread):
         - (Optional) Compute cardiac parameters
         - Save all results
         """
-        try:
-            os.makedirs(self.output_folder, exist_ok=True)
+        #try:
+        os.makedirs(self.output_folder, exist_ok=True)
 
-            # Step 1: Load exam data
-            self.log_signal.emit("Loading DICOM data...")
-            de = DicomExam(self.input_folder, self.output_folder, self.clean_params['dict_z_slices_removed'], self.clean_params['dict_time_frames_removed'])
+        # Step 1: Load exam data
+        self.log_signal.emit("Loading DICOM data...")
 
-            #Step 2: Standardising number of time frames over series
-            self.log_signal.emit("Standardising Number of Time Frames Across Series by Resampling..")
-            de.standardiseTimeframes()
+        de = DicomExam(self.input_folder, self.output_folder, self.clean_params['dict_z_slices_removed'], self.clean_params['dict_time_frames_removed'])
 
-            # Step 2: Run segmentation
-            self.log_signal.emit("Running segmentation...")
-            segment(de, **self.crop_params)
+        #Step 2: Standardising number of time frames over series
+        self.log_signal.emit("Standardising Number of Time Frames Across Series by Resampling..")
+        de.standardiseTimeframes()
 
-            # Save segmentation results
-            self.log_signal.emit("Save Segmentation Results ..")
-            de.save_images(prefix='full')
-            seg_image_folder = os.path.join(de.folder['initial_segs'])
+        # Step 2: Run segmentation
+        self.log_signal.emit("Running segmentation...")
+        segment(de, **self.crop_params)
+
+        # Save segmentation results
+        self.log_signal.emit("Save Segmentation Results ..")
+        de.save_images(prefix='full')
+        seg_image_folder = os.path.join(de.folder['initial_segs'])
+        if os.path.exists(seg_image_folder):
+            self.seg_images_signal.emit(seg_image_folder)
+
+        # Step 3: Landmark estimation
+        self.log_signal.emit("Estimating valve plane position...")
+        estimateValvePlanePosition(de)
+        self.log_signal.emit("Estimating landmarks...")
+        de.estimate_landmarks()
+
+        # Step 4: Optional data cleaning
+        if self.do_clean:
+            self.log_signal.emit("Cleaning data...")
+            de.clean_data(self.clean_params['percentage_base'], self.clean_params['percentage_apex'], self.clean_params["slice_threshold"])
+            self.log_signal.emit("Saving cleaned images...")
+            de.save_images(prefix='cleaned')
             if os.path.exists(seg_image_folder):
                 self.seg_images_signal.emit(seg_image_folder)
-
-            # Step 3: Landmark estimation
-            self.log_signal.emit("Estimating valve plane position...")
-            estimateValvePlanePosition(de)
-            self.log_signal.emit("Estimating landmarks...")
-            de.estimate_landmarks()
-
-            # Step 4: Optional data cleaning
-            if self.do_clean:
-                self.log_signal.emit("Cleaning data...")
-                de.clean_data(self.clean_params['percentage_base'], self.clean_params['percentage_apex'], self.clean_params["slice_threshold"])
-                self.log_signal.emit("Saving cleaned images...")
-                de.save_images(prefix='cleaned')
-                if os.path.exists(seg_image_folder):
-                    self.seg_images_signal.emit(seg_image_folder)
+        else:
+            if self.clean_params['dict_z_slices_removed'] is not None or self.clean_params['dict_time_frames_removed'] is not None:
+                self.log_signal.emit("Data cleaning skipped as specific slices/time frames were removed based on user input.")
             else:
                 self.log_signal.emit("Data cleaning skipped as per user selection.")
 
-            # Step 5: Optional cardiac analysis
-            if self.do_cardiac:
-                self.log_signal.emit("Analyse segmentation masks...")
-                compute_cardiac_parameters(de, 'seg')
-                cardiac_plot_folder = os.path.join(de.folder['seg_plots']) 
-                if os.path.exists(cardiac_plot_folder):
-                    self.cardiac_plots_signal.emit(cardiac_plot_folder)
-            else:
-                self.log_signal.emit("Skipping cardiac parameter plot generation as per user selection.")
+        # Step 5: Optional cardiac analysis
+        if self.do_cardiac:
+            self.log_signal.emit("Analyse segmentation masks...")
+            compute_cardiac_parameters(de, 'seg')
+            cardiac_plot_folder = os.path.join(de.folder['seg_plots']) 
+            if os.path.exists(cardiac_plot_folder):
+                self.cardiac_plots_signal.emit(cardiac_plot_folder)
+        else:
+            self.log_signal.emit("Skipping cardiac parameter plot generation as per user selection.")
 
-            # Step 6: Save full analysis object
-            self.log_signal.emit("Saving analysis object...")
-            de.save()
-            self.log_signal.emit("Analysis finished.")
+        # Step 6: Save full analysis object
+        self.log_signal.emit("Saving analysis object...")
+        de.save()
+        self.log_signal.emit("Analysis finished.")
 
-        except Exception as e:
-            # Catch and forward any error message to the GUI
-            self.log_signal.emit(f"Error during analysis: {e}")
+        # except Exception as e:
+        #     # Catch and forward any error message to the GUI
+        #     self.log_signal.emit(f"Error during analysis: {e}")
 
         # Always emit finished signal so GUI can react
         self.finished_signal.emit()
