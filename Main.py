@@ -158,9 +158,13 @@ for index,dataset_to_use in enumerate(datasets):
         de.estimate_landmarks()
         de.save()
 
-        print("Cleaning data...")
-        #Clean MRI data based on Segmentations
-        de.clean_data()
+        if dict_z_slices_removed is not None or dict_time_frames_removed is not None:
+            print("Data cleaning skipped as specific slices/time frames were removed based on user input.")
+
+        else:
+            print("Cleaning data...")
+            #Clean MRI data based on Segmentations
+            de.clean_data()
 
         print("Estimate MRI orientation...")
         estimate_MRI_orientation(de)
