@@ -245,7 +245,7 @@ class MeshGenerationApp(QWidget):
 
             <p style="margin-bottom: 20px; font-size: 13px;">
             This module allows you to automatically fit volumetric meshes to segmented MRI series. You can either fit volumetric
-            meshes to a single MRI series or multiple MRI series (e.g. SAX and LAX view). Additionally this module includes further 
+            meshes to a single SAX MRI series. Additionally this module includes further 
             post-processing steps such as calculating blood pool and myocardium volume as well as a local thickness map for each generated mesh.
             </p>
                              
@@ -267,7 +267,7 @@ class MeshGenerationApp(QWidget):
             <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
             Click on <em>Select Segmented Data...</em> and select the folder containing the MRI images in either DICOM or NIfTI format. 
             You should have a folder containing all DICOM or NIfTI files for one patient. The individual MRI series of that patient, that are already segmented, should be in separate subfolders.
-            For example you should have the folder for patient X that contains a subfolder for an acquired SAX MRI series and a subfolder for an acquired LAX MRI series.
+            For example you should have the folder for patient X that contains a subfolder for the acquired SAX MRI series to which a mesh should be fit. 
             </p>
             
             <p style="margin-bottom: 8px;"><strong>2. Select Output Folder:</strong></p>
