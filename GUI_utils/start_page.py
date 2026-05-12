@@ -251,6 +251,7 @@ class StartPage(QWidget):
         main_layout.addStretch()
 
     
+    
     def get_detailed_text(self):
         return """
         <div style="font-family: 'Segoe UI';">
@@ -268,7 +269,6 @@ class StartPage(QWidget):
          <ul style="margin: 0; padding-left: 20px;">
          <li style="margin-bottom: 6px;"><strong>Segmentation:</strong> Automatic segmentation of left ventricle, blood pool and right ventricle from cardiac MRI.</li>
          <li style="margin-bottom: 6px;"><strong>Data cleaning:</strong> For <strong>SAX MRI series</strong>: Automatic removal of incomplete time points and slices above the mitral valve and above the apex. 
-                                                                         For <strong>LAX MRI series</strong>: Automatic removal of incomplete time points and easy manual removal of slices in front of or behind left ventricle.</li>
          <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Calculation of myocardial and blood pool volumes from the segmentation masks of SAX MRI series using Simpson's Method</li>
          <li style="margin-bottom: 6px;"><strong>Cardiac cycle analysis:</strong> Automated ED/ES state identification and SV/EF calculation</li>
          </ul>
@@ -285,7 +285,7 @@ class StartPage(QWidget):
          <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #4A90E2;">
          <p style="margin: 0; font-weight: 600; color: #2c3e50; margin-bottom: 8px;">Features:</p>
          <ul style="margin: 0; padding-left: 20px;">
-         <li style="margin-bottom: 6px;"><strong>3D modeling:</strong> Fitting of 3D volumetric mesh to MRI segmentation masks for either a single MRI series or multiple MRI series (e.g. SAX and LAX view).</li>
+         <li style="margin-bottom: 6px;"><strong>3D modeling:</strong> Fitting of 3D volumetric mesh to MRI segmentation masks for a single MRI series</li>
          <li style="margin-bottom: 6px;"><strong>Volume analysis:</strong> Mesh-based myocardial and blood pool volume calculation</li>
          <li style="margin-bottom: 6px;"><strong>Thickness analysis:</strong> Mesh-based local myocardial thickness analysis across cardiac cycles</li>
          </ul>
