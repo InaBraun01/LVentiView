@@ -398,7 +398,7 @@ class DicomAnalysisApp(QWidget):
             <p style="margin-left: 20px; margin-bottom: 12px; font-size: 12px;">
             Click on <em>Browse MRI Data...</em> and select the folder containing the MRI images in either DICOM or NIfTI format. 
             You should have a folder containing all DICOM or NIfTI files for one patient. The individual MRI series of that patient, that should be segmented, should be in separate subfolders.
-            For example you should have the folder for patient X that contains a subfolder for an acquired SAX MRI series and a subfolder for an acquired LAX MRI series.
+            For example you should have the folder for patient X that contains a subfolder for the acquired SAX MRI series which should be segmented and 3D reconstructed.
             </p>
             
             <p style="margin-bottom: 8px;"><strong>2. Select Output Folder:</strong></p>
@@ -427,12 +427,12 @@ class DicomAnalysisApp(QWidget):
         </div>
 
         <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #4A90E2;"> 
-            <p style="margin-bottom: 10px; font-weight: 600;">Manual Cleaning of SAX and LAX slices:</p>
+            <p style="margin-bottom: 10px; font-weight: 600;">Manual Cleaning of SAX:</p>
                 <ul style="margin: 0; padding-left: 25px; font-size: 12px;"> 
                     <li style="margin-bottom: 6px;"> <strong>Z Slices to Remove:</strong> For MRI series that should be segmented, provide a list of z-slice indices to remove (starting at 0).
-                            List one series per line and ensure the correct series name is used. <br><br> <em>Example:</em><br> CINELAX_301: 0,1,2,3<br> CINESAX_300: 0,1,4 </li>       
+                            List one series per line and ensure the correct series name is used. <br><br> <em>Example:</em> CINESAX_300: 0,1,4 </li>       
                     <li style="margin-bottom: 6px;"> <strong>Time Steps to Remove:</strong> For MRI series that should be segmented, provide a list of time-frame indices to remove (starting at 0). 
-                             List one series per line and ensure the correct series name is used. <br><br> <em>Example:</em><br> CINELAX_301: 0,11<br> CINESAX_300: 0,12,13 </li> </ul> </div>
+                             List one series per line and ensure the correct series name is used. <br><br> <em>Example:</em> CINESAX_300: 0,12,13 </li> </ul> </div>
 
         <h3 style="color: #4A90E2; font-size: 15px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;">
         Select Postprocessing Steps
@@ -663,7 +663,6 @@ class DicomAnalysisApp(QWidget):
             input_widget.setPlaceholderText(
                 "Format: One series per line\n"
                 "Example:\n"
-                "CINELAX_301: 0,1,2,3,7,8,9,10\n"
                 "CINESAX_300: 0,1,10,11"
             )
             input_widget.setMaximumHeight(100)  # Limit height
@@ -1166,7 +1165,6 @@ class DicomAnalysisApp(QWidget):
     def parse_series_dict(self, text, param_name):
         """Parse multi-line input into dictionary format.
         Expected format:
-            CINELAX_301: 0,1,2,3,7,8,9,10
             CINESAX_300: 0,1,10,11
         """
         result = {}
@@ -1238,3 +1236,4 @@ class DicomAnalysisApp(QWidget):
 
         result_text = "\n".join(lines)
         self.results_box.setPlainText(result_text)
+
