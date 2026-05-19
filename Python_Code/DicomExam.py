@@ -194,21 +194,34 @@ class DicomExam:
         """
         for series in self:
 
-            if series.view in ['SAX', 'unknown']:
+            #clean time frames
+            if remove_time_steps == []:
+                remove_time_steps = None
+            if remove_time_steps:
+                incomplete_frames = clean_time_frames(series, slice_threshold,remove_time_steps)
+            else:
+                incomplete_frames = clean_time_frames(series, slice_threshold)
 
-                if remove_time_steps:
-                    remove_time_steps = [x - 1 for x in remove_time_steps]
-                    incomplete_frames = clean_time_frames(series, slice_threshold,remove_time_steps)
+            self.time_frames = self.time_frames - len(incomplete_frames)
 
-                else:
-                    incomplete_frames = clean_time_frames(series, slice_threshold)
+            #clean z slices above base and below apex
+            if remove_z_slices == []:
+                remove_z_slices = None
 
+            if remove_z_slices:
+                clean_slices_apex(series, percentage_apex,remove_z_slices)
 
-                # Update time frame count after cleaning
-                self.time_frames = self.time_frames - len(incomplete_frames)
+            else:
+                #Automatic cleaning only for SAX slices
+                if series.view in ['SAX', 'unknown']:
+                    # Remove planes above base
+                    clean_slices_base(series,incomplete_frames,percentage_base)
 
-                #Postprecess cleaned data: Calculate world coordinates and new crop
-                postprocess_cleaned_data(self)
+                    # Remove slices below apex
+                    apex_slices = clean_slices_apex(series, percentage_apex)
+
+            #Postprecess cleaned data: Calculate world coordinates and new crop
+            postprocess_cleaned_data(self)
 
     def standardiseTimeframes(self, resample_to='fewest'):
         '''
