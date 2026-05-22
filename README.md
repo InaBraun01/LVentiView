@@ -92,19 +92,19 @@ pip install --upgrade pip
 
 3. **Install required Python packages:**
 ```bash
-pip install numpy==1.23.5 \
-            pyvista==0.42.3 \
-            scipy==1.10.1 \
+pip install numpy==2.4.3 \
+            pyvista==0.47.1 \
+            scipy==1.17.1 \
             pydicom==2.4.4 \
             meshio==5.3.5 \
-            tqdm==4.66.4 \
+            tqdm==4.67.3 \
             imageio==2.33.1 \
-            scikit-image==0.19.3 \
+            scikit-image==0.26.0 \
             torch torchvision torchaudio \
-            pandas==2.0.3 \
+            pandas==3.0.1 \
             seaborn==0.13.2 \
             onnx2torch==1.5.15 \
-            PyQt5==5.15.10
+            PyQt5==5.15.10 
 ```
 
 4. **Activate the Python virtual environment**:
