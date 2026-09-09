@@ -28,7 +28,7 @@ def calculate_lv_height(file_path):
 
 
 #Creates the LV length for all of the meshes and saves them into a csv file in the mesh analysis folder for that specific patient
-root = Path("/data.lfpn/ibraun/Code/paper_volume_calculation/outputs_patient_data/SAX_final_results/")
+root = Path("/data/fpb/ibraun/Code/paper_volume_calculation/outputs_patient_data/SAX_full_result/")
 
 for folder in root.iterdir():
     if folder.is_dir():
@@ -40,8 +40,8 @@ for folder in root.iterdir():
         # destination_dir = f"/data/fpb/ibraun/Code/paper_volume_calculation/outputs_patient_data/LAX_results_128/{folder.name}/Analysis_Meshes"
 
         #For the SAX slices
-        meshes_dir = f"/data/fpb/ibraun/Code/paper_volume_calculation/outputs_patient_data/SAX_final_results/{folder.name}/meshes"
-        destination_dir = f"/data/fpb/ibraun/Code/paper_volume_calculation/outputs_patient_data/SAX_final_results/{folder.name}/mesh_analysis_data"
+        meshes_dir = f"/data/fpb/ibraun/Code/paper_volume_calculation/outputs_patient_data/SAX_full_result/{folder.name}/Meshes/VTK_files"
+        destination_dir = f"/data/fpb/ibraun/Code/paper_volume_calculation/outputs_patient_data/SAX_full_result/{folder.name}/Analysis_Meshes"
 
 
         #Process all VTK files

@@ -287,7 +287,7 @@ def plot_time_series(data: pd.DataFrame, y_value: str, file_name: str,
 
     # Save plots
     plt.savefig(
-        os.path.join(output_folder, f'{filename}.pdf'), 
+        os.path.join(output_folder, f'{filename}.png'), 
         dpi=300, bbox_inches='tight'
     )
     plt.savefig(
@@ -498,6 +498,11 @@ def seg_masks_compute_thickness_map(
             
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
+                
+            print(dicom_exam.time_frames)
+
+            # Collect per-timestep stats across all time frames
+            thickness_stats = {}
             
             for time in range(dicom_exam.time_frames):
                 seg_stack = dicom_exam.series[0].prepped_seg[time, :, :, :]
@@ -551,11 +556,40 @@ def seg_masks_compute_thickness_map(
                         r_values = r[mask]
                         thickness = r_values.max() - r_values.min()
                         thickness_map[z, ti] = thickness
-                
+
+                    # Compute mean thickness across all (z, theta) bins, ignoring NaN values
+                    mean_thickness = np.nanmean(thickness_map)
+
+                    # Global std across all (z, theta) bins
+                    std_thickness_global = np.nanstd(thickness_map)
+
+                    # Per-slice angular std, then averaged over z
+                    std_per_slice = np.nanstd(thickness_map, axis=1)   # shape (Z,)
+                    mean_of_stds = np.nanmean(std_per_slice)
+
+                    thickness_stats[time] = {
+                        'mean': mean_thickness,
+                        'std_global': std_thickness_global,
+                        'std_mean_of_slices': mean_of_stds,
+                    }
+
+                    print(
+                        f"Time {time:>3d} | "
+                        f"Mean thickness: {mean_thickness:.3f} mm | "
+                        f"Global std: {std_thickness_global:.3f} mm | "
+                        f"Mean-of-slice stds: {mean_of_stds:.3f} mm"
+                    )
+
                 # Save and visualize results
                 seg_mask_plot_thickness_map(thickness_map, time, output_folder)
                 np.save(os.path.join(output_folder, f"thickness_map_{time}"), thickness_map)
+                print(os.path.join(output_folder, f"thickness_map_{time}"))
 
+            df = pd.DataFrame.from_dict(thickness_stats, orient="index")
+            df.index.name = "time"
+            df = df.reset_index()
+
+            df.to_csv(os.path.join(output_folder, "thickness_stats.csv"), index=False)
 
 def _calculate_centroid_from_reference_slice(
     dicom_exam, 
@@ -598,55 +632,81 @@ def _calculate_centroid_from_reference_slice(
 def meshes_compute_thickness_map(dicom_exam) -> None:
     """
     Compute thickness maps from 3D mesh data using cylindrical coordinate analysis.
-    
     This function processes VTK mesh files to generate thickness measurements
     in cylindrical coordinates. The mesh is first translated to origin, converted
     to cylindrical coordinates, and then analyzed in ring-shaped z-slices to
     compute radial thickness variations.
-    
     Args:
         dicom_exam: DICOM examination object containing mesh folder paths and 
                    time frame information
-    
     Returns:
         None: Function saves thickness maps and filtered z-coordinates to disk
-    
     """
     mesh_folder = dicom_exam.folder['meshes']
     output_folder = dicom_exam.folder['mesh_thickness']
-    
+
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
-    
+
+    thickness_stats = {}
+
     for time_step in dicom_exam.time_frames_to_fit:
         # Load mesh data
         mesh_filename = os.path.join(mesh_folder, f"mesh_t={time_step}.vtk")
-        
         if not os.path.exists(mesh_filename):
             print(f"Warning: Mesh file not found: {mesh_filename}")
             continue
-            
+
         mesh = pv.read(mesh_filename)
         points = mesh.points
-        
+
         # Preprocess mesh: translate to origin
         translate_mesh_to_origin(mesh, points, threshold=0)
-        
+
         # Convert Cartesian coordinates to cylindrical
         r, theta, z = cartesian_to_cylindrical(points)
-        
+
         # Identify ring-shaped z-slices for analysis
         ring_slices, z_bins = find_ring_slices(points, n_z_bins=15)
-    
-        
+
         # Compute thickness measurements
         thickness_map, filtered_z_coords = compute_thickness_map(
             r, theta, z, ring_slices, z_bins
         )
-        
+
+        # Compute mean thickness across all (z, theta) bins, ignoring NaN values
+        mean_thickness = np.nanmean(thickness_map)
+
+        # Global std across all (z, theta) bins
+        std_thickness_global = np.nanstd(thickness_map)
+
+        # Per-slice angular std, then averaged over z
+        std_per_slice = np.nanstd(thickness_map, axis=1)   # shape (Z,)
+        mean_of_stds = np.nanmean(std_per_slice)
+
+        thickness_stats[time_step] = {
+            'mean': mean_thickness,
+            'std_global': std_thickness_global,
+            'std_mean_of_slices': mean_of_stds,
+        }
+
+        print(
+            f"Time {time_step:>3d} | "
+            f"Mean thickness: {mean_thickness:.3f} mm | "
+            f"Global std: {std_thickness_global:.3f} mm | "
+            f"Mean-of-slice stds: {mean_of_stds:.3f} mm"
+        )
+
         # Save and visualize results
         meshes_plot_thickness_map(thickness_map, filtered_z_coords, time_step, output_folder)
-        
+
         # Save numerical results
         np.save(os.path.join(output_folder, f"thickness_map_{time_step}"), thickness_map)
         np.save(os.path.join(output_folder, f"filtered_z_coords_{time_step}"), filtered_z_coords)
+
+    # Save summary stats for all time steps
+    df = pd.DataFrame.from_dict(thickness_stats, orient="index")
+    df.index.name = "time"
+    df = df.reset_index()
+
+    df.to_csv(os.path.join(output_folder, "thickness_stats.csv"), index=False)

@@ -110,9 +110,9 @@ def train_fit_loop(dicom_exam, fitting_steps, learned_inputs, opt_method, optimi
 
         # Initialize training variables
         if i > 2*ts3:  # linearly decrease blood pool weight during training
-            bp_weight = 0
+            bp_weight = 1# 0
         elif i > ts3:
-            bp_weight = (2*ts3-i)/ts3
+            bp_weight = 1 #(2*ts3-i)/ts3
         else:
             bp_weight = 1
             

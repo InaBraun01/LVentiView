@@ -77,13 +77,14 @@ class DicomExam:
         self.output_folder = output_folder
         self.dict_z_slices_removed = dict_z_slices_removed
         self.dict_time_frames_removed = dict_time_frames_removed
-        
+
+
         # Processing attributes
         self.sax_slice_intersections = None
         self.series_to_exclude = []
         self.fitted_meshes = {}
         self.folder = generate_exam_folders(self.output_folder, self.id_string)
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = 'cpu' #torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         # Cardiac landmark attributes (initialized later)
         self.vpc = None
@@ -138,7 +139,11 @@ class DicomExam:
                     self.series.append(ds)
                     self.series_names.append(series_dir)
         
+
+        # self.series = [self.series[0]]
         self.num_series = len(self.series)
+
+
 
     def __str__(self):
         """Return string representation of the DicomExam."""
@@ -171,7 +176,8 @@ class DicomExam:
         with open(fname, "wb") as file_to_save:
             pickle.dump(self, file_to_save)
 
-    def clean_data(self, percentage_base = 0.7,percentage_apex = 0.2 ,slice_threshold = 2, remove_time_steps = None, remove_z_slices = None):
+
+    def clean_data(self, percentage_base = 0.3,percentage_apex = 0.2 ,slice_threshold = 2, remove_time_steps = None, remove_z_slices = None):
         """
         Clean and preprocess all DICOM series data.
         
@@ -209,19 +215,30 @@ class DicomExam:
                 remove_z_slices = None
 
             if remove_z_slices:
+
                 clean_slices_apex(series, percentage_apex,remove_z_slices)
 
             else:
-                #Automatic cleaning only for SAX slices
+
+                #Automatic cleaning above base only for SAX slice
                 if series.view in ['SAX', 'unknown']:
                     # Remove planes above base
                     clean_slices_base(series,incomplete_frames,percentage_base)
 
-                    # Remove slices below apex
-                    apex_slices = clean_slices_apex(series, percentage_apex)
+                else:
+                    # Remove planes above base
+                    clean_slices_base(series,incomplete_frames,percentage = 0.3)
+
+                # Remove slices below apex (slices that do not contain Myocardium and blood pool segmentations)
+                apex_slices = clean_slices_apex(series, percentage_apex)
+
 
             #Postprecess cleaned data: Calculate world coordinates and new crop
             postprocess_cleaned_data(self)
+
+
+        
+
 
     def standardiseTimeframes(self, resample_to='fewest'):
         '''
@@ -434,6 +451,7 @@ class DicomExam:
         elif init_mode == 1:
             all_slices = []
             for s in self:
+
                 if s.view == 'SAX':
                     
                     if s.slice_above_valveplane is None:

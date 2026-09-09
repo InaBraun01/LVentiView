@@ -53,6 +53,7 @@ def segment(dicom_exam,crop_size=None, margin_factor = 2):
         
         # Determine if this is a short-axis view
         is_sax = series.view in ['SAX', 'unknown']
+
         
         # Run segmentation at optimal resolution
         segmented_data, segmentation_mask, center_x, center_y = produce_segmentation_at_required_resolution(
@@ -66,11 +67,11 @@ def segment(dicom_exam,crop_size=None, margin_factor = 2):
         series.seg = zoom(segmentation_mask, zoom_factors, order=0)
         
         # Calculate optimal crop size based on myocardium segmentation
+
         if crop_size:
             crop_size = crop_size
         else:
-            crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y,margin_factor=2)
-        
+            crop_size = _calculate_optimal_crop_size(series.seg, center_x, center_y)
 
         crop_sizes.append(crop_size)
 
@@ -96,6 +97,9 @@ def segment(dicom_exam,crop_size=None, margin_factor = 2):
                 [1, 1]  # Pixel spacing in plane
             )
 
+            center_y = int(center_y)
+            center_x = int(center_x)
+            crop_size = int(crop_size)
             
             # Crop coordinate grids to match segmentation crop
             X_cropped = X[center_y:center_y + crop_size, center_x:center_x + crop_size]
@@ -128,101 +132,66 @@ def segment(dicom_exam,crop_size=None, margin_factor = 2):
     #calculate crop size for all series in dicom exam
     dicom_exam.sz = int(np.mean(crop_sizes))
 
-def _calculate_optimal_crop_size(segmentation, center_x, center_y, margin_factor=2):
+def _calculate_optimal_crop_size(segmentation, center_x, center_y, margin_factor=2,
+                                  myocardium_label=2):
     """
     Calculate optimal crop size based on myocardium segmentation extent.
-    
-    This function analyzes the myocardium segmentation (label=2) to determine
-    the minimum crop size needed to encompass the cardiac structures with
-    appropriate margin.
-    
+
+    Uses the bounding box of the myocardium mask rather than line-intersection
+    measurements through the center, since bounding box extent is robust to
+    shape — works equally well for ring-shaped myocardium (SAX) and
+    horseshoe-shaped myocardium (LAX), where a center-symmetric line-based
+    measurement can badly under- or over-estimate the true extent.
+
+    Rather than relying on a single slice, this computes the bounding-box
+    diameter at every (time, z) combination in the volume and takes the
+    median across all combinations that contain myocardium. This is more
+    robust than picking one representative slice/frame, since it averages
+    out cardiac-phase effects (e.g. systole vs diastole) as well as
+    slice-position effects (e.g. apex/base having a smaller footprint).
+
     Args:
         segmentation (np.ndarray): 4D segmentation array (time, slice, height, width)
-        center_x (int): X-coordinate of the crop center
-        center_y (int): Y-coordinate of the crop center
+        center_x (int): X-coordinate of the crop center (kept for signature
+            compatibility / potential future use; not required by the
+            bounding-box approach itself)
+        center_y (int): Y-coordinate of the crop center (see above)
         margin_factor (float): Multiplier for adding margin around detected structure
-        
+        myocardium_label (int): label value corresponding to myocardium in
+            this segmentation's class mapping — VERIFY this against your
+            actual class indices (SAX and LAX checkpoints may use different
+            label orderings; don't assume 2 for both).
+
     Returns:
         int: Optimal crop size (always even number for compatibility)
-        
-    Algorithm:
-        1. Find a representative time frame and slice with myocardium
-        2. Measure structure extent in 4 directions (horizontal, vertical, 2 diagonals)
-        3. Average the measurements to get representative diameter
-        4. Apply margin factor and round to even number
     """
     time_steps, z_stacks, height, width = segmentation.shape
-    
-    # Start with middle time frame and slice
-    mid_time = time_steps // 2
-    mid_slice = z_stacks // 2
-    
-    # Find a slice with myocardium segmentation (label = 2)
-    myocardium_mask = None
-    slice_idx = mid_slice
-    
-    # Search backwards from middle slice
-    while slice_idx >= 0:
-        candidate_mask = segmentation[mid_time, slice_idx, :, :]
-        if np.sum(candidate_mask == 2) > 0:  # Found myocardium
-            myocardium_mask = candidate_mask
-            break
-        slice_idx -= 1
-    
-    # If no myocardium found in backwards search, try other time frames
-    if myocardium_mask is None:
-        for time_idx in [mid_time + 1, mid_time - 1]:
-            if 0 <= time_idx < time_steps:
-                candidate_mask = segmentation[time_idx, mid_slice, :, :]
-                if np.sum(candidate_mask == 2) > 0:
-                    myocardium_mask = candidate_mask
-                    break
-    
-    # Fallback: use any available myocardium mask
-    if myocardium_mask is None:
-        myocardium_mask = np.zeros((height, width))
-        print("Warning: No myocardium segmentation found, using default crop size")
-    
-    # Measure structure extent in multiple directions
+
     diameters = []
-    
-    # Horizontal diameter through center
-    horizontal_coords = np.where(myocardium_mask[center_x, :] == 2)[0]
-    if len(horizontal_coords) > 0:
-        horizontal_diameter = horizontal_coords[-1] - horizontal_coords[0]
-        diameters.append(horizontal_diameter)
-    
-    # Vertical diameter through center  
-    vertical_coords = np.where(myocardium_mask[:, center_y] == 2)[0]
-    if len(vertical_coords) > 0:
-        vertical_diameter = vertical_coords[-1] - vertical_coords[0]
-        diameters.append(vertical_diameter)
-    
-    # Main diagonal diameter
-    main_diag_coords = np.where(np.diag(myocardium_mask) == 2)[0]
-    if len(main_diag_coords) > 0:
-        # Scale by sqrt(2) to account for diagonal distance
-        main_diag_diameter = (main_diag_coords[-1] - main_diag_coords[0]) * math.sqrt(2)
-        diameters.append(main_diag_diameter)
-    
-    # Anti-diagonal diameter
-    anti_diag_coords = np.where(np.diag(np.rot90(myocardium_mask)) == 2)[0]
-    if len(anti_diag_coords) > 0:
-        anti_diag_diameter = (anti_diag_coords[-1] - anti_diag_coords[0]) * math.sqrt(2)
-        diameters.append(anti_diag_diameter)
-    
-    # Calculate average diameter or use default
-    if diameters:
-        average_diameter = np.mean(diameters)
-    else:
-        average_diameter = 64  # Default size if no measurements available
-        print("Warning: Could not measure myocardium extent, using default diameter")
-    
-    # Apply margin and ensure even number
-    crop_size_with_margin = average_diameter * margin_factor
+    for time_idx in range(time_steps):
+        for slice_idx in range(z_stacks):
+            candidate_mask = segmentation[time_idx, slice_idx, :, :]
+            rows, cols = np.where(candidate_mask == myocardium_label)
+
+            if len(rows) == 0:
+                continue
+
+            height_extent = rows.max() - rows.min()
+            width_extent = cols.max() - cols.min()
+            diameter = max(height_extent, width_extent)
+            diameters.append(diameter.item())
+
+    if not diameters:
+        print("Warning: No myocardium segmentation found, using default crop size")
+        return _round_up_to_even(64 * margin_factor)
+
+    diameter = np.median(diameters)
+
+    crop_size_with_margin = diameter * margin_factor
     final_crop_size = _round_up_to_even(crop_size_with_margin)
-    
+
     return final_crop_size
+
 
 
 def _round_up_to_even(value):

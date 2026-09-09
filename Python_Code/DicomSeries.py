@@ -57,19 +57,67 @@ class DicomSeries(object):
             (data, pixel_spacing, image_ids, dicom_details,
             slice_locations, trigger_times, image_positions,
             is3D, multifile) = dataArrayFromDicom(full_path, self.z_height_remove, self.time_frame_remove)
+
+
+
+            # import matplotlib.pyplot as plt
+            # time = 0
+
+            # fig, axes = plt.subplots(4, 5, figsize=(12, 10))
+
+            # for z, ax in enumerate(axes.flat):
+            #     if z < data.shape[1]:
+            #         ax.imshow(data[time, z], cmap="gray")
+            #         ax.set_title(f"Slice {z}")
+            #     ax.axis("off")
+
+            # plt.tight_layout()
+            # plt.savefig("test_image.png")
         
             # Store DICOM metadata
             self.orientation = np.array(list(dicom_details['ImageOrientation']))
         
+        # Automatically determine cardiac view type
+        self.guessView()
+
+
+        #segmentation network for SAX is a 3D segmentation network, with max number of z heights input 16
+        if self.view in ['SAX', 'unknown']:
+            # use only the top 16 z slices 
+            if data.shape[1] > 16:
+                print(f"WARNING: Input data contains {data.shape[1]} z-slices, but the SAX segmentation network supports a maximum of 16 slices. "
+                f"Only the first 16 z-slices will be used.")
+                data = data[:, :16, :, :]
+                image_ids = image_ids[:,:16]
+                slice_locations = slice_locations[:16]
+                image_positions = image_positions[:16]
+
+
+            # data = data[:, 3:13, :, :]
+            # image_ids = image_ids[:,3:13]
+            # slice_locations = slice_locations[3:13]
+            # image_positions = image_positions[3:13]
+
+        #else: 
+            #data = data[:, 2:5, :, :]
+            #flip the data for LAX views to match the orientation of SAX views
+            #data = np.rot90(data, k=2, axes=(-2, -1))
+
+            # image_ids = image_ids[:,2:5]
+            # slice_locations = slice_locations[2:5]
+            # image_positions = image_positions[2:5]
+
 
         self.data = data
         self.pixel_spacing = pixel_spacing
         self.image_ids = image_ids
         self.dicom_details = dicom_details
         self.slice_locations = slice_locations
+
         self.trigger_times = trigger_times
         
         self.image_positions = image_positions
+
         self.is3D = is3D
         self.multifile = multifile
         self.VP_heuristic1 = None
@@ -82,8 +130,7 @@ class DicomSeries(object):
         self.slices = self.data.shape[1]  # Number of image slices
         self.seg = None  # Segmentation mask (populated later)
         
-        # Automatically determine cardiac view type
-        self.guessView()
+
     
     def __str__(self):
         """
@@ -120,27 +167,29 @@ class DicomSeries(object):
         """
         folder_name = self.series_folder_name
         
-        # Check for explicit view indicators in folder name
-        if 'sax' in folder_name or 'sa' in folder_name:
-            self.view = 'SAX'
-        elif 'lax' in folder_name or 'la' in folder_name:
-            self.view = 'LAX'
-        elif '2ch' in folder_name:
-            self.view = '2CH'
-        elif '3ch' in folder_name:
-            self.view = '3CH'
-        elif '4ch' in folder_name:
-            self.view = '4CH'
-        # Handle non-DICOM formats (typically preprocessed SAX data)
-        elif 'nii.gz' in folder_name or '.npy' in folder_name:
-            self.view = 'SAX'
-        # Use slice count heuristic (SAX typically has multiple slices)
-        elif self.data.shape[1] > 3:
-            print(f"Processing data as SAX")
-            self.view = 'SAX'
-        else:
-            self.view = 'unknown'
-            
+        # # Check for explicit view indicators in folder name
+        # if 'sax' in folder_name or 'sa' in folder_name:
+        #     self.view = 'SAX'
+        # elif 'lax' in folder_name or 'la' in folder_name:
+        #     self.view = 'LAX'
+        # elif '2ch' in folder_name:
+        #     self.view = '2CH'
+        # elif '3ch' in folder_name:
+        #     self.view = '3CH'
+        # elif '4ch' in folder_name:
+        #     self.view = '4CH'
+        # # Handle non-DICOM formats (typically preprocessed SAX data)
+        # elif 'nii.gz' in folder_name or '.npy' in folder_name:
+        #     self.view = 'SAX'
+        # # Use slice count heuristic (SAX typically has multiple slices)
+        # elif self.data.shape[1] > 3:
+        #     print(f"Processing data as SAX")
+        #     self.view = 'SAX'
+        # else:
+        #     self.view = 'unknown'
+
+        self.view = "SAX"
+
         return self.view
 
 

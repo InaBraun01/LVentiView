@@ -30,7 +30,7 @@ def fit_mesh(dicom_exam,
              allow_slice_shift=True,
              allow_rotations=True,
              dice_loss_weight = 5,
-             mode_loss_weight=7.4e-07,
+             mode_loss_weight= 1e-9,
              global_shift_penalty_weigth=0.3,
              slice_shift_penalty_weigth=10,
              rotation_penalty_weigth=1,
@@ -90,9 +90,11 @@ def fit_mesh(dicom_exam,
     # Load shape model components
     (mesh_1, exterioror_mesh_points, PHI3, PHI, mode_bounds, mode_means, mesh_axes) = ut.load_ShapeModel(num_modes, sz, cp_frequency=cp_frequency, model_dir=mesh_model_dir)
 
+
     # Prepare voxelized mean mesh for input
     mean_arr_batch, mesh_origin = ut.prepare_voxelized_mean_array(mesh_1, sz, use_bp_channel, device)
     mean_arr_batch =  [mean_arr_batch for i in range(len(time_frames_to_fit))]
+
     
     #normalize starting cp
     starting_cp = (exterioror_mesh_points - mesh_origin) / sz

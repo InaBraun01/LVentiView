@@ -5,6 +5,8 @@ from scipy.ndimage.measurements import center_of_mass
 from scipy.stats import linregress
 from skimage import measure
 import matplotlib.pyplot as plt
+import cv2
+from scipy.ndimage import uniform_filter1d
 
 from Python_Code.Utilis.pytorch_segmentation_utils import (
     produce_segmentation_at_required_resolution, simple_shape_correction
@@ -53,7 +55,7 @@ def clean_slices_base(dicom_series, incomplete_frames, percentage = 0.7):
         
         # Count how many time frames this slice is above the valve plane
         for col in range(number_time_frames):
-            if dicom_series.slice_above_valveplane[col, row] == 0:  # 0 indicates above valve plane
+            if dicom_series.slice_above_valveplane[col, row] == 1:  # 1 indicates above valve plane
                 number_above_base += 1
 
             # If this slice is above valve plane in enough time frames, mark for removal
@@ -76,8 +78,10 @@ def clean_slices_base(dicom_series, incomplete_frames, percentage = 0.7):
           number_z_stacks - 1 not in z_height_remove):
         if (number_z_stacks - 1) >= 0:
             z_height_remove.extend([number_z_stacks - 1])
-    
-    z_height_remove= extract_preferred_consecutive_group(z_height_remove,threshold = int(dicom_series.slices/2))
+
+    z_height_remove = expand_removal_indices(z_height_remove, dicom_series.slices)
+
+
     # Remove identified slices from all data structures
     dicom_series.prepped_seg = np.delete(dicom_series.prepped_seg, z_height_remove, axis=1)
     dicom_series.prepped_data = np.delete(dicom_series.prepped_data, z_height_remove, axis=1)
@@ -86,7 +90,6 @@ def clean_slices_base(dicom_series, incomplete_frames, percentage = 0.7):
 
     dicom_series.image_positions = [item for i, item in enumerate(dicom_series.image_positions) if i not in z_height_remove]
     dicom_series.slice_locations = [item for i, item in enumerate(dicom_series.slice_locations) if i not in z_height_remove]
-
 
     return z_height_remove
 
@@ -125,7 +128,7 @@ def estimateValvePlanePosition(dicom_exam):
     """
     for series in dicom_exam:
         if series.view == 'LAX':
-            series.slice_above_valveplane = None
+            estimateValvePlanePositionLAX(dicom_exam)
         elif series.view == 'SAX':
             # Initialize valve plane heuristic array
             VP_heuristic2 = np.zeros((series.frames, series.slices))
@@ -229,6 +232,7 @@ def clean_time_frames(dicom_series, slice_threshold = 2,remove_time_steps=None):
         dicom_series.prepped_data: Updated with incomplete frames removed
         dicom_series.frames: Updated frame count
     """
+
     if remove_time_steps:
         incomplete_frames = remove_time_steps
 
@@ -261,22 +265,25 @@ def clean_time_frames(dicom_series, slice_threshold = 2,remove_time_steps=None):
 
     return incomplete_frames
 
-def extract_preferred_consecutive_group(lst, threshold):
-    if len(lst) < 2:
-        return lst
+def expand_removal_indices(remove_list, n_z_heights):
+    """
+    Expand a list of z-slice indices to remove into a full removal set:
+    - if an index is in the lower half of the stack, remove everything below it down to 0
+    - if an index is in the upper half of the stack, remove everything above it up to n_z_heights - 1
+    """
+    if not remove_list:
+        return remove_list
 
-    # Step 1: Fill single-number gaps (i.e., where difference == 2)
-    filled = [lst[0]]
-    for i in range(1, len(lst)):
-        prev = lst[i - 1]
-        curr = lst[i]
-        if curr - prev == 2:
-            filled.append(prev + 1)  # fill the hole
-        elif curr - prev > 2:
-            pass  # skip large gaps
-        filled.append(curr)
+    half = n_z_heights / 2
+    expanded = set()
 
-    return filled
+    for idx in remove_list:
+        if idx < half:
+            expanded.update(range(0, idx + 1))       # cascade down to 0
+        else:
+            expanded.update(range(idx, n_z_heights))  # cascade up to the top
+
+    return sorted(expanded)
 
 def clean_slices_apex(dicom_series, percentage = 0.2, remove_z_slices = None):
     """
@@ -360,7 +367,7 @@ def clean_slices_apex(dicom_series, percentage = 0.2, remove_z_slices = None):
             slices_to_remove.sort()
 
         #make sure the extracted slices form a consecutive list
-        slices_to_remove = extract_preferred_consecutive_group(slices_to_remove,threshold = int(dicom_series.slices/2))
+        slices_to_remove = expand_removal_indices(slices_to_remove, dicom_series.slices)
 
 
     # Remove problematic slices from all data structures
@@ -457,10 +464,11 @@ def postprocess_cleaned_data(dicom_exam) -> None:
             (0, 1, 3, 2)
         )
 
+        
+
 
         # Optional shape correction for short-axis view
         if is_sax:
-            print("Applying shape correction for SAX view")
             series.prepped_seg = simple_shape_correction(series.prepped_seg)
 
 
@@ -534,3 +542,171 @@ def estimate_MRI_orientation(dicom_exam):
             dicom_exam.MRI_orientation = "base_top"
         elif start_avg < end_avg:
             dicom_exam.MRI_orientation = "apex_top"
+
+
+
+# FUNCTIONS FOR LAX CLEANING
+
+def _count_connected_components(mask):
+    """
+    Count the number of connected components (blobs) in a binary mask.
+
+    Args:
+        mask (np.ndarray): 2D binary mask
+
+    Returns:
+        int: number of connected components (0 if mask is empty)
+    """
+    if np.sum(mask) == 0:
+        return 0
+    labeled = measure.label(mask, background=0)
+    return labeled.max()
+
+def _is_contour_curvature_nonmonotone(mask, smoothing_window=5, sign_change_threshold=6,
+                                       min_contour_points=20):
+    """
+    Determine whether the outer contour of a binary mask has a "non-monotone"
+    curvature profile.
+
+    An intact LV cross-section (below the valve plane) traces out a roughly
+    smooth, convex-ish contour whose curvature has few sign changes. Above
+    the valve plane, as the LV cavity merges with / distorts near the
+    atrium, the contour tends to develop concave dents and irregular
+    wiggles, producing many curvature sign changes along the boundary. We
+    use the count of curvature sign changes as a simple proxy for "monotone
+    vs. non-monotone" contour shape.
+
+    Args:
+        mask (np.ndarray): 2D binary mask (e.g. LV blood pool)
+        smoothing_window (int): window size for smoothing contour coordinates
+            before differentiating, to suppress pixel-level jaggedness
+        sign_change_threshold (int): number of curvature sign changes above
+            which the contour is considered non-monotone. This is a heuristic
+            and may need tuning against real data.
+        min_contour_points (int): minimum number of contour points required
+            to attempt a curvature estimate; contours with fewer points are
+            considered too small/noisy to evaluate and are not flagged.
+
+    Returns:
+        bool: True if the contour is flagged as non-monotone, False otherwise
+            (including cases where no reliable contour could be extracted)
+    """
+    if np.sum(mask) == 0:
+        return False
+
+    contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL,
+                                    cv2.CHAIN_APPROX_NONE)
+    if not contours:
+        return False
+
+    # Use the largest contour in case of stray noise pixels
+    contour = max(contours, key=cv2.contourArea).squeeze()
+    if contour.ndim != 2 or len(contour) < max(min_contour_points, smoothing_window * 2):
+        return False
+
+    x = contour[:, 0].astype(float)
+    y = contour[:, 1].astype(float)
+
+    # Smooth coordinates (wrap mode since the contour is a closed loop)
+    x = uniform_filter1d(x, size=smoothing_window, mode='wrap')
+    y = uniform_filter1d(y, size=smoothing_window, mode='wrap')
+
+    dx = np.gradient(x)
+    dy = np.gradient(y)
+    ddx = np.gradient(dx)
+    ddy = np.gradient(dy)
+
+    # Discrete curvature: kappa = (x'y'' - y'x'') / (x'^2 + y'^2)^1.5
+    denom = (dx ** 2 + dy ** 2) ** 1.5
+    denom[denom == 0] = 1e-8
+    curvature = (dx * ddy - dy * ddx) / denom
+
+    signs = np.sign(curvature)
+    signs = signs[signs != 0]
+    if len(signs) < 2:
+        return False
+
+    sign_changes = np.sum(np.diff(signs) != 0)
+
+
+    return sign_changes 
+
+
+def estimateValvePlanePositionLAX(dicom_exam, myocardium_label=2, bloodpool_label=3,
+                                   curvature_smoothing_window=5, curvature_sign_change_threshold=6):
+    """
+    Estimate valve plane position in LAX (Long Axis) slices.
+
+    Unlike the SAX heuristic (which relies on myocardium closing into a ring
+    around the blood pool), LAX cross-sections don't have that ring
+    structure, so a different pair of heuristics is used per (time, slice):
+
+      1. Split heuristic: the LV blood pool mask breaks into 2+ connected
+         components. This tends to happen above the valve plane, where the
+         LV cavity separates from / is interrupted by the atrium or valve
+         structures in the 2D LAX slice.
+      2. Curvature heuristic: the blood pool contour's curvature is
+         non-monotone (many sign changes), indicating an irregular,
+         non-convex boundary shape rather than a single smooth LV cavity
+         outline.
+
+    A (time, slice) combination is flagged as "above valve plane" if either
+    heuristic fires. The resulting binary array follows the same convention
+    as the SAX case (1 = above valve plane) and is intended to be passed to
+    the existing `clean_slices_base`, e.g. with `percentage=0.3` to match
+    a "more than 30% of time steps" removal criterion.
+
+    Args:
+        dicom_exam: List of DICOM series objects, each containing:
+            - view: string indicating view type ('LAX' for long axis)
+            - frames: number of time frames
+            - slices: number of z-slices
+            - prepped_seg: 4D segmentation array where (by default):
+                - value 2 = myocardium
+                - value 3 = blood pool
+        myocardium_label (int): label value for myocardium (kept for
+            signature symmetry with the SAX function / potential future use)
+        bloodpool_label (int): label value for LV blood pool — VERIFY this
+            against your actual class indices, since LAX and SAX checkpoints
+            may use different label orderings.
+        curvature_smoothing_window (int): smoothing window passed to the
+            curvature heuristic
+        curvature_sign_change_threshold (int): sign-change threshold passed
+            to the curvature heuristic
+
+    Modifies:
+        For each LAX series in dicom_exam:
+            - slice_above_valveplane: binary array (frames x slices), 1 where
+              either heuristic fired for that (time, slice)
+            - LAX_split_components: int array (frames x slices) with the raw
+              connected-component count, for debugging/inspection
+            - LAX_curvature_flag: bool array (frames x slices) with the raw
+              curvature heuristic result, for debugging/inspection
+    """
+    for series in dicom_exam:
+        if series.view != 'LAX':
+            continue
+
+        split_components = np.zeros((series.frames, series.slices), dtype=int)
+        curvature_flag = np.zeros((series.frames, series.slices), dtype=bool)
+
+        for t in range(series.frames):
+            for j in range(series.slices):
+                bloodpool_mask = series.prepped_seg[t, j] == bloodpool_label
+
+                split_components[t, j] = _count_connected_components(bloodpool_mask)
+                curvature_flag[t, j] = _is_contour_curvature_nonmonotone(
+                    bloodpool_mask,
+                    smoothing_window=curvature_smoothing_window,
+                    sign_change_threshold=curvature_sign_change_threshold,
+                )
+
+
+        split_flag = split_components > 1
+        #above_valveplane = np.logical_or(split_flag, curvature_flag).astype(int)
+
+        above_valveplane = split_flag
+
+        series.slice_above_valveplane = above_valveplane
+        series.LAX_split_components = split_components
+        series.LAX_curvature_flag = curvature_flag

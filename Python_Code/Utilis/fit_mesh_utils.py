@@ -49,14 +49,13 @@ def load_ShapeModel(num_modes, sz, cp_frequency, model_dir):
         - Uses half-scaled model for sz < 96 (typically for monkey studies)
         - Uses full-scaled model for sz >= 96 (typically for human studies)
     """
-    # Load the mean/average mesh model
+    # # Load the mean/average mesh model
     if sz < 50:
         # Use half-scaled model for smaller left ventricles (e.g., monkey studies)
         mean_mesh_file = os.path.join(model_dir, 'Mean/LV_mean_half_scaled.vtk')
     else:
         # Use full-scaled model for larger left ventricles (e.g., human studies)
         mean_mesh_file = os.path.join(model_dir, 'Mean/LV_mean_scaled.vtk')
-
 
     mesh_1 = meshio.read(mean_mesh_file)
 
