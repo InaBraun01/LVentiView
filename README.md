@@ -68,9 +68,9 @@ LVentiView is organized into two main modules: the Segmentation module and the M
 
 ## Getting Started
 
-To use either the graphical user interface (GUI) or the code directly from the terminal, download the current release of the LVentiView [software package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.0) and follow the instructions below.
+To use either the graphical user interface (GUI) or the code directly from the terminal, download the current release of the LVentiView [software package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.1) and follow the instructions below.
 
-1. Download the current [release package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.0).
+1. Download the current [release package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.1).
 2. In the downloaded LVentiView folder, clone the CineMA codebase used for automatic segmentation: [https://github.com/mathpluscode/CineMA.git](https://github.com/mathpluscode/CineMA.git)
 3. Follow CineMA's instructions to download the finetuned models from Hugging Face. For segmentation and 3D reconstruction of multiview cardiac MRI, download `mnms2_sax` (SAX segmentation) and `mnms2_lax_4c` (LAX segmentation).
 4. Move the downloaded models into the local folder `LVentiView/cinema/weights/finetuned/segmentation`.
