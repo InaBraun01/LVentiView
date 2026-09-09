@@ -133,6 +133,9 @@ def synthesise_cardiac_mri(
     print("Cardiac MRI Synthesis Pipeline")
     print("=" * 50)
 
+    #Create output folde rif it does not yet exist
+    os.makedirs(output_path, exist_ok=True)
+
     # 2. Apply realistic intensity contrast
     print("[1/3] Applying realistic bSSFP intensity contrast...")
 
@@ -172,31 +175,33 @@ def synthesise_cardiac_mri(
 
 if __name__ == "__main__":
 
-    dataset_to_use = 'SCD3701'
+    data_sets = ["SCD1101", "SCD1701", "SCD3101", "SCD3701"]
 
-    data_dir = '/data/fpb/ibraun/Code/paper_volume_calculation/Patient_data/'
-    input_path = os.path.join(data_dir, dataset_to_use)
-    LAX_result_folder='outputs_patient_data/LAX_results_128'
+    for dataset_to_use in data_sets:
 
-    de = loadDicomExam(input_path,LAX_result_folder)
-    
-    SAX_series = de.series[1]
-    slices = np.argmax(SAX_series.mesh_seg, axis=4)
-    assert slices.ndim == 4, f"Expected sliced meshes to be a 4D array (T, Z, H, W), got shape {slices.shape}"
-    T, Z, H, W = slices.shape
-    print(f"Loaded segmentation: shape={slices.shape} (T={T}, Z={Z}, H={H}, W={W})")
-    print(f"Unique labels found: {np.unique(slices)}")
+        data_dir = '/data/fpb/ibraun/Code/paper_volume_calculation/Patient_data/'
+        input_path = os.path.join(data_dir, dataset_to_use)
+        LAX_result_folder='outputs_patient_data/LAX_results_128'
 
-    #created idealised MRI
-    synthesise_cardiac_mri(
-        slices,
-        output_path=f"/data/fpb/ibraun/Code/paper_volume_calculation/Idealized_Human_model/{dataset_to_use}",
-        realistic = False
-    )
+        de = loadDicomExam(input_path,LAX_result_folder)
+        
+        SAX_series = de.series[1]
+        slices = np.argmax(SAX_series.mesh_seg, axis=4)
+        assert slices.ndim == 4, f"Expected sliced meshes to be a 4D array (T, Z, H, W), got shape {slices.shape}"
+        T, Z, H, W = slices.shape
+        print(f"Loaded segmentation: shape={slices.shape} (T={T}, Z={Z}, H={H}, W={W})")
+        print(f"Unique labels found: {np.unique(slices)}")
 
-    #create realistic MRI
-    synthesise_cardiac_mri(
-        slices,
-        output_path=f"/data/fpb/ibraun/Code/paper_volume_calculation/Realistic_Human_Model/{dataset_to_use}/",
-        realistic = True
-    )
+        #created idealised MRI
+        synthesise_cardiac_mri(
+            slices,
+            output_path=f"/data/fpb/ibraun/Code/paper_volume_calculation/Idealized_Human_model/{dataset_to_use}",
+            realistic = False
+        )
+
+        #create realistic MRI
+        synthesise_cardiac_mri(
+            slices,
+            output_path=f"/data/fpb/ibraun/Code/paper_volume_calculation/Realistic_Human_Model/{dataset_to_use}/",
+            realistic = True
+        )
