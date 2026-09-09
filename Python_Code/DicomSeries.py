@@ -167,28 +167,26 @@ class DicomSeries(object):
         """
         folder_name = self.series_folder_name
         
-        # # Check for explicit view indicators in folder name
-        # if 'sax' in folder_name or 'sa' in folder_name:
-        #     self.view = 'SAX'
-        # elif 'lax' in folder_name or 'la' in folder_name:
-        #     self.view = 'LAX'
-        # elif '2ch' in folder_name:
-        #     self.view = '2CH'
-        # elif '3ch' in folder_name:
-        #     self.view = '3CH'
-        # elif '4ch' in folder_name:
-        #     self.view = '4CH'
-        # # Handle non-DICOM formats (typically preprocessed SAX data)
-        # elif 'nii.gz' in folder_name or '.npy' in folder_name:
-        #     self.view = 'SAX'
-        # # Use slice count heuristic (SAX typically has multiple slices)
-        # elif self.data.shape[1] > 3:
-        #     print(f"Processing data as SAX")
-        #     self.view = 'SAX'
-        # else:
-        #     self.view = 'unknown'
-
-        self.view = "SAX"
+        # Check for explicit view indicators in folder name
+        if 'sax' in folder_name or 'sa' in folder_name:
+            self.view = 'SAX'
+        elif 'lax' in folder_name or 'la' in folder_name:
+            self.view = 'LAX'
+        elif '2ch' in folder_name:
+            self.view = '2CH'
+        elif '3ch' in folder_name:
+            self.view = '3CH'
+        elif '4ch' in folder_name:
+            self.view = '4CH'
+        # Handle non-DICOM formats (typically preprocessed SAX data)
+        elif 'nii.gz' in folder_name or '.npy' in folder_name:
+            self.view = 'SAX'
+        # Use slice count heuristic (SAX typically has multiple slices)
+        elif self.data.shape[1] > 3:
+            print(f"Processing data as SAX")
+            self.view = 'SAX'
+        else:
+            self.view = 'unknown'
 
         return self.view
 
