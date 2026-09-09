@@ -67,12 +67,14 @@ Accurate quantification of left ventricular cavity volume (LVV) and ejection fra
 LVentiView is organized into two main modules: the Segmentation module and the Mesh Generation module. The software can be used either through a graphical user interface (GUI) or directly from the terminal. Regardless of the interface, the inputs and outputs remain identical.
 
 ## Getting Started
-To use either the graphical user interface (GUI) or the code directly from the terminal, simply download the current release of LVentiView [software package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.0) and follow the instructions below. 
 
-1. Download the current release [software package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.0)
-2. In the downloaded folder containing the code (LVentiView), create a new folder called (SegmentationModels)
-3. Move the downloaded files containing NN weights (pytorch_my_LAX_Model.pth and pytorch_my_model.pth) into the folder SegmentationModels
-4. Continue with setting up the python virtual environment needed
+To use either the graphical user interface (GUI) or the code directly from the terminal, download the current release of the LVentiView [software package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.0) and follow the instructions below.
+
+1. Download the current [release package](https://github.com/InaBraun01/LVentiView/releases/tag/v1.0).
+2. In the downloaded LVentiView folder, clone the CineMA codebase used for automatic segmentation: [https://github.com/mathpluscode/CineMA.git](https://github.com/mathpluscode/CineMA.git)
+3. Follow CineMA's instructions to download the finetuned models from Hugging Face. For segmentation and 3D reconstruction of multiview cardiac MRI, download `mnms2_sax` (SAX segmentation) and `mnms2_lax_4c` (LAX segmentation).
+4. Move the downloaded models into the local folder `LVentiView/cinema/weights/finetuned/segmentation`.
+5. Set up the Python virtual environment needed to run the code.
 
 
 ### Python Virtual Environment
@@ -104,7 +106,12 @@ pip install numpy==2.4.3 \
             pandas==3.0.1 \
             seaborn==0.13.2 \
             onnx2torch==1.5.15 \
-            PyQt5==5.15.10 
+            PyQt5==5.15.10 \
+            monai==1.6.0 \
+            timm==1.0.28 \
+            einops==0.8.2 \
+            safetensors==0.8.0 \
+            matplotlib==3.10.8
 ```
 
 4. **Activate the Python virtual environment**:
@@ -112,7 +119,7 @@ pip install numpy==2.4.3 \
 source ~/lventiview_env/bin/activate
 ```
 
-Now you can either launche the GUI from the terminal and work with the graphical user interphase or you can continue to run the software from the terminal.
+Now you can either launch the GUI from the terminal and work with the graphical user interphase or you can continue to run the software from the terminal.
 
 ## Launching the GUI from the terminal
 First make sure that you have created and activated the python environment as described above. Next you can simply open the GUI by running 
